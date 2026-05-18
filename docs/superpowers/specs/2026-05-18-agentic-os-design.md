@@ -1,9 +1,22 @@
 # Agentic OS — design specification
 
-**Date:** 2026-05-18
+**Date:** 2026-05-18 (revised 2026-05-19)
 **Owner:** Robert Ghafoor
 **Status:** Approved for implementation planning
-**Source:** Conversation 2026-05-18; supersedes nothing (first version).
+**Source:** Conversation 2026-05-18/19; supersedes nothing (first version).
+
+## Architecture revision — 2026-05-19
+
+Phase 0 smoke tests confirmed that Claude Code's current platform makes the original "parent dispatches subagents" model infeasible without the experimental `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` flag, which we chose not to depend on. The relevant findings:
+
+- **Issue [#34592](https://github.com/anthropics/claude-code/issues/34592)** (CLOSED as "not planned"): `AskUserQuestion` is not available in subagents. Same gap for `EnterPlanMode` / `ExitPlanMode`.
+- **Issue [#35240](https://github.com/anthropics/claude-code/issues/35240)**: `SendMessage` (for mid-flight intervention) is gated behind the agent-teams experimental flag.
+- **Issue [#1770](https://github.com/anthropics/claude-code/issues/1770)** (still OPEN, no Anthropic response in 11 months): parent-child agent communication is intentionally not exposed programmatically.
+- **Empirical**: on VS Code-integrated CC, `run_in_background: true` spawns new VS Code windows per agent.
+
+**Decision**: adopt **Shape A — same-session pipeline**. Ticket implementation runs in the user's main CC session, one active ticket at a time, with automatic handoff between tickets via the queue. Subagents (foreground only) are reserved for non-interactive batch helpers (consolidate, lint, test, research). No experimental flags, no background dispatch, no SendMessage dependency. The OS becomes a coordination layer around the user's existing CC workflow rather than an orchestrator that spawns parallel workers.
+
+The sections below reflect the revised architecture. Sections §§4, 8, 9 and Appendices B–D survived the revision largely unchanged; §§1, 2, 3, 5, 6, 7, 10, 11 and Appendix A were rewritten.
 
 ---
 
@@ -15,7 +28,7 @@ Build a personal agentic operating system that gives me a centralized, improvabl
 - **Cross-session forgetting** — fixed by a curated `learnings.md` index plus a draft/consolidate/archive loop that compresses raw observations into durable rules without context rot.
 - **Outputs scattered + inconsistent** — fixed by deterministic paths under `~/.claude/agentic-os/` (memory, state, task scratch) and explicit conventions enforced by the orchestrator.
 - **Skills don't compose** — fixed by an orchestrator that wraps the existing public plugins (`jira-ticket`, `ship-branch`, `claude-mem`) without modifying them.
-- **New capability: parallel Jira ticket workflows.** Multiple subagents dispatched on per-ticket git worktrees with isolated dev servers, live human intervention via `AskUserQuestion` / `SendMessage`, and an explicit approval gate before ship.
+- **New capability: queue-driven ticket pipeline with auto-handoff.** Tickets are queued in advance; the OS processes them serially in the user's main CC session — set up the worktree, hand off to jira-ticket, implement, ship, and automatically pull the next queued ticket. One ticket actively running at a time but human review time becomes the only friction between tickets, not setup.
 
 The OS is also a learning exercise. It should be a clean, idiomatic Claude Code plugin that I can extend later with new agents (time reporting, mail triage, etc.) without restructuring.
 
@@ -25,6 +38,7 @@ The OS is also a learning exercise. It should be a clean, idiomatic Claude Code 
 - **Existing public plugins are sacred.** `jira-ticket`, `ship-branch`, `azure-devops-build`, `itwillsync`, `optimize-skill-description`, `claude-mem`, `superpowers` are not modified. The OS composes around them.
 - **Plugin packaging, not symlinks.** Source lives in this repo; install via marketplace; personal data lives in `~/.claude/agentic-os/` outside the plugin cache so plugin updates never overwrite it.
 - **Single user, single machine in v1.** Multi-machine sync is an explicit non-goal.
+- **Same-session execution model.** All ticket work runs in the user's main Claude Code session. Subagent dispatch is reserved for batch helpers that do not require human input mid-run (consolidation, lint runs, test runs, research). Required by current CC platform limitations — see the architecture revision note above.
 - **Frontend-focused work; backend is shared QA on Azure.** Backend-mutating work is serialized through a lock; frontend work runs freely in parallel.
 - **No new memory framework.** Markdown for global/client/task tiers, `claude-mem` retained for per-project semantic observations. Obsidian is not in v1.
 - **No web UI in v1.** All orchestration via Claude Code slash commands. State is JSON-shaped so a read-only web mirror can be added later as a phase 2.
@@ -91,10 +105,27 @@ Fallback (unused — V1 verified by reference to Anthropic's official marketplac
 
 ### 3.2 Composition with existing plugins
 
-- `jira-ticket` — invoked unchanged from inside subagents for ticket workflows. The OS calls it; never wraps or forks. Branch creation and dedup are entirely jira-ticket's responsibility — the orchestrator creates a detached worktree and lets jira-ticket's Step 2 own the branch.
-- `ship-branch` — invoked by subagents during the SHIPPED phase per the client's configured ship strategy.
+The OS runs plugins **in the user's main CC session**, not in dispatched subagents. This means every existing plugin works exactly as it does today — same UI, same prompts, same tool access.
+
+- `jira-ticket` — invoked from the user's main session for ticket workflows. The OS sets up the worktree first (detached, from main), then naturally references the ticket ID, which auto-triggers `jira-ticket` in the same session. Its Step 2 dedup logic detects the existing worktree state and proceeds normally. The OS never modifies or wraps `jira-ticket`.
+- `ship-branch` — invoked from the user's main session during the SHIPPED phase per the client's configured ship strategy.
 - `claude-mem` — continues to capture per-project observations on its own. The OS reads observations indirectly through Claude's existing surface, never directly.
 - `superpowers` — used at design time (brainstorming, writing-plans, executing-plans). Not invoked at runtime by the OS.
+
+### 3.3 Same-session execution model
+
+Under Shape A (see the architecture revision note at the top of this spec), the user's main CC session **is** the worker. The OS:
+
+- Maintains state files (`queue.json`, `in-flight.json`, `ports.json`, `locks.json`) that any session can read or update
+- Provides slash commands that the user invokes in their main session
+- Loads identity + client + learnings context automatically via the session-start hook
+- Coordinates between tickets by automatically suggesting the next queued ticket after a ship
+
+Subagent dispatch is reserved for **non-interactive batch helpers**:
+- `/aos-consolidate` — runs in a foreground subagent so the parent never sees the full draft+curated content during promotion. Defers all interactive decisions back to the main session.
+- Optional helper subagents for research, lint runs, test runs, or one-off code inspection tasks. These must be fire-and-forget (no human input required mid-run) per CC platform constraints (Issue #34592).
+
+No subagent ever invokes `jira-ticket`, `ship-branch`, or any other plugin that uses interactive prompts. Those run in the main session only.
 
 ## 4. Memory model
 
@@ -141,14 +172,13 @@ The agentic OS does not own these. They continue to work as today.
 
 | File | Owner | Purpose |
 |---|---|---|
-| `tasks/<ticket>/mission.md` | Parent writes initially; appends on `/aos-resume` and on rejection feedback | Pointers + constraints (NOT inlined content) |
-| `tasks/<ticket>/notes.md` | Subagent writes | Running narrative |
-| `tasks/<ticket>/activity.log` | Subagent appends per action | One line per significant action; for cheap monitoring |
-| `tasks/<ticket>/report.md` | Subagent writes on SUBMITTED | Structured verification + outcome |
-| `tasks/<ticket>/help-request.md` | Subagent writes if stuck and `AskUserQuestion` fails | Structured human question |
-| `tasks/<ticket>/approval.json` | Parent writes after human decision | Approval verdict + feedback |
+| `tasks/<ticket>/setup.md` | OS writes once on `/aos-start-ticket` | Ticket pointers (ID, repo, worktree, port). No mission instructions — the main session does the work itself. |
+| `tasks/<ticket>/notes.md` | Main session writes as work proceeds | Running narrative (decisions, what was tried) |
+| `tasks/<ticket>/report.md` | Written on `/aos-submit` | Structured verification + outcome (see Appendix B) |
+| `tasks/<ticket>/feedback.md` | OS appends on `/aos-revise <feedback>` | Reviewer feedback that triggered revision |
+| `tasks/<ticket>/state.json` | OS writes throughout lifecycle | Current state: RUNNING / SUBMITTED / SHIPPED / etc., plus timestamps |
 
-On `SHIPPED` and successful close, the parent moves `tasks/<ticket>/` to `tasks/_archive/<ticket>/`.
+On `/aos-ship` and successful close, the OS moves `tasks/<ticket>/` to `tasks/_archive/<ticket>/`.
 
 ### 4.6 Runtime state — separate from memory
 
@@ -157,11 +187,11 @@ All JSON, all under `state/`. Machine-global, mutated under file lock.
 ```
 state/ports.json       port ownership across the machine
 state/queue.json       all queued tickets across all repos (FIFO with priority)
-state/in-flight.json   running subagents + recent completions (rolling, last 50)
+state/in-flight.json   currently-active ticket + recent completions (rolling, last 50)
 state/locks.json       coarse resource locks (qa_backend, etc.)
 ```
 
-State is read by every orchestrator command and every subagent. Subagents are forbidden from writing state directly — only the parent mutates it.
+State is read by every `/aos-*` command and by helper subagents. Helper subagents (consolidate, lint, test) are forbidden from writing state — only the main session mutates state through the `/aos-*` slash commands. Under Shape A there is at most ONE active ticket in `in-flight.json` at a time (`max_concurrent_tickets` defaults to 1; values > 1 are reserved for a future agent-teams-enabled mode).
 
 ## 5. Orchestration
 
@@ -172,105 +202,138 @@ All slash commands ship as skills under `plugin/skills/`. The orchestrator skill
 | Command | Surface | Purpose |
 |---|---|---|
 | `/aos-install` | any | First-run: scaffold `~/.claude/agentic-os/` from templates, pre-grant Write permission |
-| `/aos-identity` | any | Mode auto-detected. **Build mode** (no identity.md present): runs the 15-question interview (see Appendix D), writes `identity.md`. **Refine mode** (identity.md present): reads current file + claude-mem observations + recent learnings, forms gap hypotheses, asks 5–8 targeted questions, proposes a diff for approval. Runs in a subagent. |
+| `/aos-identity` | any | Mode auto-detected. **Build mode** (no identity.md present): runs the 15-question interview (see Appendix D), writes `identity.md`. **Refine mode** (identity.md present): reads current file + claude-mem observations + recent learnings, forms gap hypotheses, asks 5–8 targeted questions, proposes a diff for approval. Runs in a helper subagent (non-interactive layers); interactive parts come back to the main session. |
 | `/aos-load-context` | any | Read identity, learnings, and (if cwd matches) client brand + workflows into current conversation |
-| `/aos-tickets` | agentic-os | List Jira tickets assigned to user, grouped by project, with in-flight markers; then present the list via `AskUserQuestion` so each ticket is a clickable option to start or queue (no typing IDs). Re-run for a fresh snapshot — live updates are the phase-2 web UI's job. |
-| `/aos-queue COMP-123` | any | Validate ticket exists, append to `state/queue.json` |
-| `/aos-start-ticket COMP-123` | agentic-os | Full dispatch (see §5.3) |
-| `/aos-status` | any | Show in-flight workers + recent completions + queue |
-| `/aos-intervene COMP-123 <message>` | agentic-os | `SendMessage` to a running subagent with new guidance |
-| `/aos-park COMP-123` | agentic-os | Gracefully exit a SUBMITTED subagent; retain worktree for later resume |
-| `/aos-resume COMP-123` | agentic-os | Re-spawn a subagent against a previously-parked worktree |
-| `/aos-abort COMP-123` | agentic-os | Kill a running subagent; mark as failed; release resources |
-| `/aos-consolidate` | agentic-os | Subagent walks draft + curated + deep, promotes/archives, returns short summary |
-| `/aos-review-stale-learnings` | agentic-os | Subagent surfaces curated rules with `last_validated > stale_threshold` |
+| `/aos-tickets` | any | List Jira tickets assigned to user, grouped by project, with in-flight markers; then present the list via `AskUserQuestion` so each ticket is a clickable option to start or queue. Re-run for a fresh snapshot. |
+| `/aos-queue COMP-123` | any | Validate ticket exists, append to `state/queue.json`. Use multiple times to queue several tickets in advance. |
+| `/aos-start-ticket COMP-123` | any | Sets up worktree, port, state, then **hands off to the current session for implementation** via jira-ticket. See §5.3. |
+| `/aos-status` | any | Show currently-active ticket + queue + recent completions |
+| `/aos-submit` | any | Mark the currently-active ticket as SUBMITTED. Writes `report.md` (asks the main session to fill in the verification block). State transition. |
+| `/aos-ship` | any | Approve the currently-submitted ticket. Invokes `ship-branch` (per client workflows), updates state to SHIPPED, archives task dir, and if queue is non-empty, suggests `/aos-start-ticket <next>`. |
+| `/aos-revise <feedback>` | any | Reject the currently-submitted ticket with feedback. Writes `feedback.md`, transitions back to RUNNING in the same session. |
+| `/aos-park` | any | Pause the currently-active ticket. Saves state, leaves worktree intact. After `/clear` you can resume with `/aos-resume <TICKET>`. |
+| `/aos-resume COMP-123` | any | Restore a parked ticket as the currently-active one. Loads task scratch + worktree + state into the current session. |
+| `/aos-abort` | any | Abandon the currently-active ticket. Marks state as ABORTED, removes the detached worktree, releases port. Confirmation required. |
+| `/aos-consolidate` | any | Runs in a helper subagent (non-interactive layer). Promotes drafts to curated; archives stale rules with high confidence; demotes weakest on cap. Defers interactive items back to the main session. |
+| `/aos-review-stale-learnings` | any | Main session walks stale curated rules and asks "still true?" per entry via AskUserQuestion. |
 
-`/aos-tickets`, `/aos-queue`, and `/aos-status` use the Atlassian MCP server directly (the same one `jira-ticket` uses internally). They do not invoke the `jira-ticket` plugin as a tool. Subagents dispatched by `/aos-start-ticket` may invoke `jira-ticket` for the full ticket workflow.
+All `/aos-*` commands work from any directory (including inside a client repo or the agentic-os repo). State files at `~/.claude/agentic-os/state/` are the single source of truth, so any session can see the current active ticket and queue.
 
-### 5.2 Parent-thin / subagent-heavy principle
+`/aos-tickets`, `/aos-queue`, and `/aos-status` use the Atlassian MCP server directly to look up Jira data. They do NOT invoke the `jira-ticket` plugin as a tool — `jira-ticket` is reserved for invocation from the main session during implementation (`/aos-start-ticket` triggers it implicitly by referencing the ticket ID once setup is complete).
 
-The parent never reads anything large or repeated per-dispatch (identity, brand, ticket bodies, code). It does:
+### 5.2 OS as coordination layer; main session does the work
 
+Under Shape A there is no parent/subagent split for ticket work. The user's main CC session IS the worker, and the OS adds a thin coordination layer around it:
+
+The OS (via slash commands) does:
 - Slash-command parsing
 - Small JSON reads/writes (state files)
-- Port allocation, worktree creation
-- Subagent dispatch with a tiny mission
-- Short report reads on return
-- SendMessage routing
+- Worktree creation/cleanup
+- Port allocation
+- Memory-tier loading (identity, client brand, learnings) via the session-start hook or `/aos-load-context`
+- Queue management with auto-handoff suggestion after each ship
 
-The subagent does:
-
-- `/aos-load-context` on first turn (or auto via session-start hook)
-- Atlassian MCP fetch of full ticket body
+The main session does (with the OS having set things up):
+- Atlassian MCP fetch of full ticket body (via jira-ticket)
 - All implementation work
 - Test execution
-- Report writing
+- Report writing (`/aos-submit` prompts the session to produce the verification block)
+- Ship steps (`/aos-ship` invokes ship-branch)
+- Answering `AskUserQuestion` prompts from jira-ticket or superpowers tiers — these work natively because everything is in one session
 
-This keeps parent context budget low across many dispatches in one session.
+This means the user sees everything happening live: jira-ticket's Step 2 prompts, implementation decisions, test output, dev server logs. There's no opaque "subagent doing things" — the OS is just adding structure and automation around what the user already does in CC today.
 
-### 5.3 `/aos-start-ticket COMP-123` dispatch flow
+#### Context management across tickets in one session
+
+Working multiple tickets back-to-back in a single session causes context buildup. Two patterns the OS supports:
+
+- **Continuous session**: run several tickets without `/clear`. Pros: cross-ticket context continuity (e.g., learning something while doing COMP-123 informs how COMP-456 is approached). Cons: context grows large; CC compaction may kick in mid-ticket.
+- **Cleared-between-tickets**: after `/aos-ship`, run `/clear` before the next `/aos-start-ticket`. The session-start hook re-loads identity + client + learnings. claude-mem keeps observations across sessions. Pros: bounded context per ticket. Cons: lose cross-ticket conversational continuity (still have file-based memory).
+
+The OS suggests but never forces. Configurable via `config.session.suggest_clear_between_tickets` (default `true`).
+
+### 5.3 Same-session ticket pipeline flow
+
+`/aos-start-ticket COMP-123` runs in the user's main session and prepares the ticket for in-session work. The skill does the setup; the user's session then carries out the work via jira-ticket and other plugins running natively.
 
 ```
-[1] LOOKUP    Parent reads clients/*/repos.md; matches COMP-123's project prefix to a repo path.
-              No ticket body fetched — that's the subagent's job.
+USER: /aos-start-ticket COMP-123
 
-[2] CONCURRENCY CHECK
-              If in_flight.length >= config.concurrency.max_concurrent_tickets:
-                Enqueue with priority preserved. Print "queued, will dispatch when slot frees."
-                Stop.
+[1] CHECK     Skill reads state/in-flight.json.
+              If an active ticket already exists, refuse and offer:
+                "COMP-XYZ is currently active. Use /aos-park first, or /aos-abort to cancel it."
+              Stop.
+
+[2] LOOKUP    Skill fetches just enough Jira data to know the repo, via Atlassian MCP
+              (`getJiraIssue`, only the fields needed: project key, title, summary).
+              Cross-references clients/*/repos.md to resolve project key → workspace repo path.
+              No body, no acceptance criteria — those come in via jira-ticket later.
 
 [3] LOCK PORT Open state/ports.json under file lock.
-              Find first free port in config.concurrency.port_range.
-              Claim it: { owner: "ticket-COMP-123", since: now }.
-              Release lock.
+              Allocate first free port in config.concurrency.port_range. Default 3001.
+              Record { owner: "ticket-COMP-123", since: now }. Release lock.
 
 [4] WORKTREE  git -C C:\Workspace\<repo> worktree add --detach \
-                  C:\Workspace\<repo>\.worktrees\<TICKET-ID> main
-              Detached worktree at main's tip; NO branch is created here.
-              Branch creation is jira-ticket's responsibility (Step 2 of its workflow)
-              and happens inside the subagent's first turn.
+                  C:\Workspace\<repo>\.worktrees\COMP-123 main
+              Detached worktree at main's tip. Branch creation belongs to jira-ticket Step 2.
 
-[5] MISSION   Write ~/.claude/agentic-os/tasks/COMP-123/mission.md (tiny, ~30 lines, see Appendix A).
+[5] STATE     Initialize tasks/COMP-123/ scratch dir with:
+                setup.md       (ticket pointers, see Appendix A)
+                notes.md       (empty)
+                state.json     ({ "state": "RUNNING", "started_at": now })
+              Append to state/in-flight.json:
+                { ticket: "COMP-123", state: "RUNNING", port, worktree, task_dir, started_at }.
 
-[6] RECORD    Append to state/in-flight.json with agent_id placeholder.
+[6] CD        Skill uses Bash to change directory: cd <worktree>.
+              Subsequent commands in this session execute in the worktree.
 
-[7] DISPATCH  Agent({
-                description: "<TICKET-ID>",         // visible name in CC UI; e.g., "COMP-123"
-                isolation: "worktree",
-                working_directory: <worktree>,
-                run_in_background: true,
-                prompt: "Read ~/.claude/agentic-os/tasks/<TICKET-ID>/mission.md and execute it.
-                         Begin with /aos-load-context. End by writing report.md and entering SUBMITTED."
-              })
-              Capture agent_id; update in-flight.json with both agent_id and display_name (= ticket ID).
+[7] HANDOFF   Skill prints a clear handoff message to the user:
+                "Worktree ready at C:\Workspace\catella\.worktrees\COMP-123 (port 3017).
+                 Beginning COMP-123 — jira-ticket will fetch the full body next."
+              Skill emits a line referencing the ticket ID; jira-ticket's auto-trigger
+              activates and runs its full Step 1–5 protocol in this session.
+              From here, the user IS in the ticket work: prompts from jira-ticket
+              go to their UI, AskUserQuestion works, dev server starts on port 3017.
 
-[8] (parent yields; can dispatch more or do other work)
+[8] WORK      User (with Claude) implements the ticket in the session.
+              Tests are run via shell commands. Dev server runs on assigned port.
+              Decisions logged to tasks/COMP-123/notes.md as work proceeds.
+              Take as long as needed; this is normal CC implementation work.
 
-[9] SUBMITTED Subagent finishes implementation, writes report.md, enters wait state.
-              Dev server still running on assigned port.
-              Notification fires to parent.
+USER: /aos-submit
+[9] SUBMITTED Skill verifies tests pass (asks user to confirm if it can't autodetect).
+              Writes tasks/COMP-123/report.md from a template (see Appendix B);
+              the main session fills in the verification block based on what was actually run.
+              Updates state.json and state/in-flight.json: state = "SUBMITTED".
+              Prints: "COMP-123 submitted. Review at http://localhost:3017 or
+                       run /aos-ship to approve, /aos-revise <reason> to reject."
 
-[10] TRUST CHECK
-              Parent runs a shell command in the worktree:
-                cd <worktree> && pnpm lint && pnpm test --filter <changed-files>
-              Result recorded in state/in-flight.json.
-              No subagent spawn; sub-second to a few minutes depending on suite.
-
-[11] PRESENT  Parent surfaces to /aos-status (and phase-2 web UI later):
-              "COMP-123 ready for review at http://localhost:<port>"
-
-[12] APPROVE  Human reviews at localhost:<port>, reads notes/report.
+[10] REVIEW   Human reviews live (dev server still running, worktree intact).
               Either:
-                approve  → parent SendMessages subagent "approved" → subagent ships, dev server stops.
-                reject   → parent SendMessages subagent "rejected with: <feedback>" → REVISING, back to RUNNING.
+                /aos-ship           → continue to [11]
+                /aos-revise <text>  → write feedback.md, state = RUNNING, loop back to [8]
 
-[13] SHIPPED  Subagent runs ship steps (push, optional PR creation per config).
-              Exits. Port released. Worktree retained or removed per ship strategy.
+USER: /aos-ship
+[11] SHIP     Skill invokes ship-branch with the worktree's branch (created by jira-ticket).
+              ship-branch handles the merge per the client's ship strategy.
+              On success: state = "SHIPPED", port released, worktree removed (or retained
+              per ship strategy), tasks/COMP-123/ archived to tasks/_archive/COMP-123/.
 
-[14] CLEANUP  Parent moves tasks/COMP-123/ to tasks/_archive/COMP-123/.
-              If queue has items and slot is free, dequeue and dispatch next.
-              Check consolidation thresholds (see §9.2 Triggers); auto-dispatch
-              /aos-consolidate (non-interactive) per config.memory.consolidate_mode.
+[12] CONSOLIDATE
+              Check consolidation thresholds (§9.2). If applicable, dispatch
+              /aos-consolidate as a helper subagent (non-interactive layer only —
+              defers interactive items back to main session). Parent context cost
+              is minimal because subagent does the heavy reading.
+
+[13] NEXT     Skill reads state/queue.json.
+              If queue is non-empty, suggest the next ticket:
+                "COMP-456 is next in queue. Run /aos-start-ticket COMP-456 to begin
+                 (or /clear first if you'd like a fresh context window)."
+              If suggest_clear_between_tickets is true, suggest /clear before next.
+              If queue is empty, print: "Queue is empty. No more tickets."
+```
+
+The flow is interactive (with the user, in their session) rather than autonomous (a subagent doing work behind the scenes). This is by design — see the architecture revision note at the top of this spec.
 ```
 
 ### 5.4 Mission file (`mission.md`) template
@@ -287,81 +350,98 @@ See **Appendix B**.
 
 | Class | Examples | Strategy |
 |---|---|---|
-| Mechanical | Port range exhausted, worktree creation fails, ticket not found, branch exists | Parent catches and surfaces a clear error; no subagent dispatched; state unchanged |
-| Subagent failure | Tests fail and subagent gives up; build broken | Subagent writes `report.md` with `status: failed`; parent releases port; marks in-flight as `failed`; surfaces report |
-| Subagent stuck / human needed | Ambiguous spec, missing credentials, design decision | See §6.2 below |
+| Mechanical setup | Port range exhausted, worktree creation fails, ticket not found, branch already exists | `/aos-start-ticket` skill catches and surfaces a clear error; state unchanged; ticket remains queueable |
+| Implementation failure (in-session) | Tests fail and the user/Claude can't fix; build broken; design impossible | Mark ticket as FAILED via `/aos-abort` (or revise approach in-session); state recorded; worktree retained for human inspection |
+| Helper subagent failure | `/aos-consolidate` or similar helper crashes | Helper returns error; OS surfaces to main session; user decides next step |
 
-### 6.2 Intervention model (three levels, ordered by interactivity)
+### 6.2 Intervention (Shape A — no levels, just typing)
 
-**Level 1 — `AskUserQuestion` from the subagent.** Cleanest UX. Subagent has the tool in its allowlist. When stuck, calls `AskUserQuestion` with 2–4 concrete options. Question routes to the user's Claude Code UI. User answers. Response flows back to subagent. No kill, no resume. Same mechanism `jira-ticket` already uses for ticket clarifications. Inherited transparently when invoked from subagent.
+Because all ticket work runs in the user's main session, intervention is **native to the conversation**:
 
-**Level 2 — `SendMessage` from the parent to a running subagent.** Parent uses `SendMessage` against the subagent's agent_id (captured at dispatch time) to inject new guidance. Subagent receives on next turn and incorporates. Triggered by `/aos-intervene COMP-123 <message>`.
+- jira-ticket needs to clarify the ticket? It uses `AskUserQuestion` directly in your UI.
+- A design decision comes up mid-implementation? Claude in your session asks you (with all tools available, including AskUserQuestion).
+- You want to change direction mid-flow? You just type it. There's no subagent to message — the conversation is the channel.
 
-**Level 3 — Help-request file + kill/aos-resume (fallback).** If Levels 1 and 2 fail (e.g., subagent has gone into a tool-use loop and isn't responsive), subagent eventually writes `help-request.md` and exits `needs_help`. Parent surfaces; user provides input via `/aos-resume COMP-123 <answer>`; parent appends to mission.md and re-dispatches against the existing worktree.
+Removed concepts that don't apply under Shape A:
+- ~~Level 1 (`AskUserQuestion` from subagent)~~ — N/A. Ticket work isn't in a subagent. AskUserQuestion in main session works naturally.
+- ~~Level 2 (`SendMessage` to subagent)~~ — N/A. No running subagent for ticket work. Helper subagents (consolidate) are fire-and-forget; they can't be messaged mid-run but they're short-running and non-interactive by design.
+- ~~Level 3 (help-request file + kill/resume)~~ — N/A. Same reason.
+
+For helper subagents (consolidate, lint, test) that do hit something unexpected: they return an error string in their result, and the main session decides what to do.
 
 ### 6.3 Watchdog
 
-- Inactivity timeout: if no writes to `activity.log` for `config.intervention.watchdog_inactivity_minutes` (default 15), parent assumes stuck. Kills via TaskStop; marks `needs_help`.
-- Total runtime cap: `config.intervention.subagent_total_runtime_max_minutes` (default 60). Same behavior.
-
-Watchdog is implemented as occasional small polls of the activity log: parent checks file modtime only, reads contents only if modtime is suspiciously stale. Cost is negligible compared to dispatch and does not violate the parent-thin principle.
+Mostly N/A under Shape A — the user IS the work; "inactivity" means the user paused work, which is fine. The watchdog concept survives only for helper subagents in narrow form: if `/aos-consolidate` runs longer than `config.intervention.helper_max_runtime_minutes` (default 5), the OS suggests aborting via `TaskStop`. Helper subagents are expected to be short.
 
 ### 6.4 Retries
 
-- Mechanical errors: no retry. Deterministic; user must adjust input.
-- Subagent test/lint failures: subagent has its own internal retry budget per its mission. Parent does not retry these at the orchestrator level.
-- Agent tool infrastructure errors: parent retries dispatch once. Retry semantics: remove the failed worktree (`git worktree remove --force`) — note the worktree is detached, no branch cleanup needed since jira-ticket hadn't yet created one — release the port back to `state/ports.json`, then re-run the full dispatch flow from §5.3 step 3. If second attempt fails, surface to user with both error messages.
+- Mechanical setup errors: no retry. Deterministic; the user adjusts input and re-runs `/aos-start-ticket`.
+- Implementation failures: handled in-session by the user + Claude. No automatic retry mechanism — retry is just "keep trying things until it works, or `/aos-abort`."
+- Helper subagent errors: surface the error message; suggest re-running the helper or doing the work inline in the main session.
 
-## 7. Subagent lifecycle and testing
+## 7. Ticket lifecycle and testing
 
-### 7.1 Lifecycle states
+### 7.1 Lifecycle states (Shape A)
+
+The lifecycle now describes the **state of the active ticket** as recorded in `state/in-flight.json`, not the state of a subagent.
 
 ```
-DISPATCHED → RUNNING → SUBMITTED → APPROVED → SHIPPED → TERMINATED
-                          │            │
-                          │            └── (or rejected) → REVISING → RUNNING
-                          │
-                          └── failed | needs_help | timeout exits
+(none) → RUNNING → SUBMITTED → SHIPPED → ARCHIVED
+              │       │
+              │       └── (rejected) → RUNNING  [/aos-revise loop]
+              │
+              ├── PARKED  [/aos-park, then /aos-resume returns to RUNNING]
+              │
+              └── ABORTED  [/aos-abort]
 ```
 
-- **RUNNING**: subagent implementing the work. Dev server may or may not be up depending on progress.
-- **SUBMITTED**: report.md written. Dev server still running on assigned port. Subagent in wait state (no token consumption beyond keep-alive). Worktree intact.
-- **APPROVED**: parent SendMessaged "approved". Subagent transitions to SHIPPED.
-- **SHIPPED**: subagent runs ship steps (push branch, optionally create PR), then exits. Dev server stops, port released.
-- **REVISING**: parent SendMessaged "rejected with: <feedback>". Subagent reads feedback, loops back to RUNNING.
-- **TERMINATED**: dev server stopped, port released, worktree retained or removed per ship strategy.
+- **(none)**: no active ticket. `/aos-start-ticket` is available.
+- **RUNNING**: a ticket is active; work is happening in the main CC session. Dev server typically running on the assigned port. Worktree is the cwd.
+- **SUBMITTED**: `/aos-submit` was run. Tests passed (per user), `report.md` written. Awaiting `/aos-ship` or `/aos-revise`. Dev server still up.
+- **SHIPPED**: `/aos-ship` was run. ship-branch merged the work. Worktree cleaned per ship strategy, port released.
+- **ARCHIVED**: task scratch moved from `tasks/<ticket>/` to `tasks/_archive/<ticket>/`. State entry moved from `in_flight` to `recent`. Ticket is done; `/aos-start-ticket` is available again.
+- **PARKED**: `/aos-park` was run. State preserved on disk, port released, dev server stopped. User can `/clear` safely. `/aos-resume <TICKET>` later brings the ticket back to RUNNING.
+- **ABORTED**: `/aos-abort` was run. Worktree removed, port released, state moved to `recent` with outcome: aborted.
 
-### 7.2 Why subagents live through approval
+### 7.2 Park + resume across sessions
 
-- Dev server stays up at `localhost:<port>` — human can preview live work without re-launching anything.
-- Trust-check runs in the same worktree without needing a fresh clone.
-- Revision is cheap: same agent_id, same context, same worktree — no respawn cost.
+`/aos-park` is the explicit "I want to /clear my context but I'm not done with this ticket" command:
 
-### 7.3 Park timeout
+- Stops the dev server (preserves changes in worktree on disk)
+- Releases the port
+- Writes a marker file `tasks/<ticket>/parked.json` with `{ "parked_at": now, "last_state": "RUNNING" }`
+- State transitions to PARKED in `state/in-flight.json`
+- User can run `/clear` safely now
 
-If a SUBMITTED subagent receives no decision after `config.concurrency.park_timeout_hours` (default 4):
+`/aos-resume <TICKET>`:
+- Reads `parked.json` and notes.md and report.md (if exists)
+- Re-allocates a port (may differ from original)
+- Re-starts dev server in the worktree
+- Sets cwd to the worktree
+- Loads context into the current session (identity, client, learnings re-loaded automatically by session-start hook)
+- Reads the ticket's setup.md and notes.md to refresh the session with what was already done
+- Transitions state to whatever it was before park (RUNNING or SUBMITTED)
+- Continues from there
 
-- Parent uses `SendMessage` to send `"park"` to the subagent's `agent_id`
-- Subagent gracefully exits: stops dev server, releases port, terminates
-- Worktree retained, notes.md/report.md preserved
-- State recorded as `status: parked`
-- `/aos-resume COMP-123` later re-spawns a subagent against the existing worktree to either revise or ship
-
-### 7.4 Test layers
+### 7.3 Test layers
 
 | Layer | Owner | Mechanism | Purpose |
 |---|---|---|---|
-| 1 — Lint + typecheck | Subagent | Repo's commands in worktree | Gate before claiming SUBMITTED |
-| 2 — Unit tests | Subagent | Repo's commands in worktree | Gate before SUBMITTED |
-| 3 — Component tests | Subagent | Repo's commands in worktree | Gate before SUBMITTED |
-| 4 — Headless browser | Subagent | `mcp__chrome-devtools__*` preferred, `mcp__claude-in-chrome__*` fallback, against `localhost:<assigned-port>` | Gate before SUBMITTED |
-| 5 — Trust-check | Parent | Shell command in worktree: lint + test on changed files | Defends against an LLM falsely claiming green; sub-minute |
-| 6 — Visual e2e | Human | Open `localhost:<port>` in browser; review the UX | Pre-approval gate |
-| 7 — PR review | Human | Read the diff | Pre-merge gate |
+| 1 — Lint + typecheck | Main session | Repo's commands in the worktree | Pre-submit gate |
+| 2 — Unit tests | Main session | Repo's commands in the worktree | Pre-submit gate |
+| 3 — Component tests | Main session | Repo's commands in the worktree | Pre-submit gate |
+| 4 — Headless browser | Main session | `mcp__chrome-devtools__*` preferred, against `localhost:<assigned-port>` | Pre-submit gate |
+| 5 — Visual e2e | Human | Open `localhost:<port>` in browser; review the UX | Pre-approval gate (between SUBMITTED and SHIP) |
+| 6 — PR review | Human | Read the diff | Pre-merge gate (could happen inside `/aos-ship` via ship-branch's strategy) |
 
-### 7.5 Backend lock
+The Shape-A spec drops the original "Layer 5 — Parent trust-check" (which existed in the subagent-dispatch design to defend against a lying subagent). With same-session execution, the user is watching the test output live; there's no "agent claims green but lied" failure mode to defend against.
 
-Some tickets mutate the shared Azure QA backend (schema changes, integration tests that write). The lock prevents two subagents from corrupting each other's QA state.
+### 7.4 Backend lock
+
+Some tickets mutate the shared Azure QA backend (schema changes, integration tests that write). With Shape A and a single active ticket at a time, this lock matters less day-to-day — but it survives in the spec for two reasons:
+
+1. The state file gives a single record of "this ticket touched QA" for traceability.
+2. If/when the user enables agent-teams in the future and `max_concurrent_tickets` becomes > 1, the lock protects against concurrent mutations.
 
 ```json
 state/locks.json
@@ -370,17 +450,17 @@ state/locks.json
 }
 ```
 
-When a subagent's mission includes backend mutation, it acquires the `qa_backend` lock at the relevant step. If held by another subagent, the subagent either waits (if mission allows) or exits with `status: blocked_on_lock`. Default: exit and surface; user decides whether to queue or cancel.
+Per ticket, before backend-mutating work, the user (or Claude in the session) writes the lock. After the work, the lock is released. Lock acquisition is advisory under Shape A (single active ticket), enforcement-grade under future modes.
 
-Frontend-only work does not acquire the lock and runs freely in parallel up to the concurrency cap.
+### 7.5 Browser tool preference
 
-### 7.6 Browser tool preference
-
-Subagents inherit the user's global rule from `~/.claude/CLAUDE.md` via `/aos-load-context`:
+Per the user's global `~/.claude/CLAUDE.md`, browser test calls in the active ticket session follow:
 
 1. Prefer `mcp__chrome-devtools__*` (real CDP emulation; required for media queries).
 2. Fall back to `mcp__claude-in-chrome__*` if unavailable.
 3. If neither, note explicitly in `report.md` verification block.
+
+This rule is loaded by the session-start hook on session start and is therefore in scope for every ticket worked in the session.
 
 ## 8. Configuration
 
@@ -389,9 +469,11 @@ Single file at `~/.claude/agentic-os/config.json`, scaffolded by `/aos-install` 
 ```json
 {
   "concurrency": {
-    "max_concurrent_tickets": 3,
-    "port_range": [3001, 3099],
-    "park_timeout_hours": 4
+    "max_concurrent_tickets": 1,
+    "port_range": [3001, 3099]
+  },
+  "session": {
+    "suggest_clear_between_tickets": true
   },
   "memory": {
     "learnings_md_max_lines": 150,
@@ -402,25 +484,27 @@ Single file at `~/.claude/agentic-os/config.json`, scaffolded by `/aos-install` 
     "auto_consolidate_suggest_at_cap_percent": 95
   },
   "intervention": {
-    "watchdog_inactivity_minutes": 15,
-    "subagent_total_runtime_max_minutes": 60
+    "helper_max_runtime_minutes": 5
   },
   "ship": {
     "create_pr_after_approval": false
   },
   "experimental": {
     "phase_2_web_ui": false,
-    "itwillsync_notify_on_help": false
+    "itwillsync_notify_on_help": false,
+    "agent_teams_when_enabled": false
   }
 }
 ```
 
-When `/aos-start-ticket` is invoked and `in_flight.length >= max_concurrent_tickets`:
-- Don't dispatch
-- Auto-enqueue with priority preserved
-- Print confirmation, stop
+**Defaults under Shape A:**
 
-When a subagent reaches TERMINATED, parent dequeues the highest-priority queued ticket and dispatches it. Self-balancing.
+- `max_concurrent_tickets: 1` — at most one active ticket; queue holds the rest. Reserved for future agent-teams-enabled mode where it may go higher.
+- `suggest_clear_between_tickets: true` — after `/aos-ship`, the OS suggests `/clear` before the next `/aos-start-ticket` to keep session context bounded. Override per personal preference.
+- `helper_max_runtime_minutes: 5` — if `/aos-consolidate` (or other helper subagent) runs longer than 5 min, OS suggests aborting it.
+- `agent_teams_when_enabled: false` — placeholder for a future opt-in. When true (and the user has set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), the OS may dispatch teammates for parallel ticket work. Not implemented in v1.
+
+When `/aos-start-ticket` is invoked and an active ticket already exists, the new ticket is automatically queued. The OS will suggest starting it after `/aos-ship` (or after `/aos-abort`/`/aos-park`).
 
 ## 9. Self-improvement loop
 
@@ -521,29 +605,29 @@ sources: [COMP-100, COMP-103, HAB-22]
 
 ## 10. Verification items (smoke tests before implementation)
 
-These exist as design assumptions. Each must be empirically confirmed before relying on it.
+After Phase 0 round 1, the verification matrix below has been updated with actual results. See `docs/superpowers/plans/smoke-results.md` for the full discussion.
 
-| # | Assumption | Test | Fallback if false |
+| # | Assumption | Result | Detail |
 |---|---|---|---|
-| V1 | Marketplace `source` field supports `{ "source": "github", "repo": "..." }` for plugins in a different repo | Add a tiny no-op plugin entry pointing at any external repo; verify install works | Use a separate marketplace (Option C from design discussion); preserves repo split |
-| V2 | A subagent dispatched via `Agent` tool with `run_in_background: true` produces an agent_id that `SendMessage` can target while the subagent is still running | Spawn a background agent that loops every 30s reading `tasks/<id>/control.json`; SendMessage it; confirm it receives and acts | Demote intervention to Level 3 only (help-request file + kill/aos-resume); document UX impact in v1 |
-| V3 | A subagent calling `AskUserQuestion` routes the question to the parent's UI when the parent is in an interactive session, AND the UI makes the source subagent identifiable | Spawn a background subagent (with `description: "TEST-A"`) that immediately calls AskUserQuestion; observe whether the UI shows "TEST-A" as the source. Then spawn two concurrent background subagents (`TEST-A`, `TEST-B`) both calling AskUserQuestion within seconds — confirm: (a) CC queues / shows / drops them, (b) the user can tell which agent's question is which. If attribution is unclear, the `[<TICKET-ID>]` prefix in the mission template (see Appendix A) is load-bearing | Subagents emit help-request.md only; no live AskUserQuestion from subagents |
-| V4 | Subagents can Read/Write to `~/.claude/agentic-os/` under default Claude Code permissions (or the install step's pre-granted Write rule covers it) | Spawn subagent that writes to `~/.claude/agentic-os/tasks/test/note.md`; confirm | `/aos-install` adds explicit Write/Edit rules to settings.local.json scoped to `~/.claude/agentic-os/**` |
-| V5 | Claude Code plugins can ship a SessionStart hook that fires on every session in any directory | Add a session-start.ps1 that writes a timestamp to a known file; reload plugins; open CC in three different directories; verify | Provide `/aos-load-context` as the manual entry point; document the requirement to run it after starting CC in client repos |
-| V6 | Plugins / skills (specifically jira-ticket) auto-trigger inside Agent-tool subagent contexts when the trigger pattern (ticket ID) appears in the mission prompt | Dispatch a subagent with the mission text containing "COMP-NNN" (a real ticket ID); observe whether jira-ticket activates and runs its workflow. If activation isn't automatic, test explicit invocation via the skill mechanism. Also verify: jira-ticket's branch-creation dedup logic correctly detects the orchestrator-created branch and does not try to re-create it | Subagents call Atlassian MCP directly and re-implement the parts of jira-ticket we need (ticket fetch, basic dedup). Real loss — we'd duplicate jira-ticket's logic and risk drift. |
+| V1 | Marketplace `source` field supports external repos | **PASS** | Verified by reference to Anthropic's official marketplace which uses `git-subdir`, `github`, `url`, and `git` source shapes in production. Spec §3.1 uses `git-subdir` for our repo-with-subdir case. |
+| V2 | `SendMessage` to a running background subagent | **FAIL** | Gated behind `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` flag (Issue #35240). Also: `run_in_background: true` in VS Code-integrated CC spawns new VS Code windows per agent. **Architectural fallback applied**: Shape A pivot — no subagent dispatch for ticket work. |
+| V3 | `AskUserQuestion` from inside a subagent | **FAIL** | Tool simply not available in subagent contexts (Issue #34592 closed as "not planned" by Anthropic; same for `EnterPlanMode`/`ExitPlanMode`). **Architectural fallback applied**: Shape A — ticket work runs in main session where AskUserQuestion natively works. |
+| V4 | Helper subagents can Read/Write to `~/.claude/agentic-os/` under default permissions | TBD | Still relevant under Shape A for helper subagents (`/aos-consolidate`, optional research/test helpers). Re-test under Shape A. Fallback: `/aos-install` adds explicit Write/Edit rules to `settings.local.json` scoped to `~/.claude/agentic-os/**`. |
+| V5 | Plugin SessionStart hook fires globally | TBD | Still core to Shape A — the hook is how identity + client context auto-load in any session. Fallback: `/aos-load-context` as the manual entry point. |
+| ~~V6~~ | ~~jira-ticket auto-trigger inside subagent~~ | **N/A** | Dropped under Shape A — jira-ticket runs in the main session, never in a subagent. |
 
-V1, V2, V3, V4, V5, V6 are step 0 of implementation per §11.
+V4 and V5 remain to be tested. V1 PASS, V2 + V3 FAIL with architectural pivots already applied to this spec.
 
 ## 11. Build order (v1 scope)
 
+Revised for Shape A. V1/V2/V3 are done (V1 PASS, V2+V3 FAIL with architectural pivots applied). V4 + V5 still to verify.
+
 ```
-0. SMOKE TESTS — verify V1 through V5 (above). 5-15 minutes each. Spec branch decisions if any fall through.
+0. REMAINING SMOKE TESTS — verify V4, V5.
 
 1. PLUGIN SCAFFOLD
    plugin.json manifest, directory structure, marketplace entry, install on local CC.
-   Informational sub-task: check whether CC auto-namespaces plugin commands by plugin name
-   (e.g., /agentic-os:tickets). If yes, the manual `/aos-` prefix is redundant but harmless —
-   keep it for consistent UX across CC versions. If no, the prefix is load-bearing.
+   Use git-subdir source per §3.1.
    Acceptance: `/plugin install agentic-os@robert-personal` works; plugin listed in /plugin.
 
 2. /aos-install
@@ -554,37 +638,47 @@ V1, V2, V3, V4, V5, V6 are step 0 of implementation per §11.
    Acceptance: fresh machine → run /aos-install → personal data tree exists.
 
 2.5. /aos-identity (build + refine modes)
-   Skill runs in subagent. Build mode: 15-question interview per Appendix D, writes identity.md.
-   Refine mode: reads existing identity.md + claude-mem observations + recent learnings,
-   asks 5-8 targeted gap questions, proposes diff for approval.
+   Skill runs in helper subagent for the non-interactive layers (reading existing identity,
+   claude-mem observations, learnings). Interactive parts (the 15 questions, refine-mode
+   diff approval) happen in the main session via AskUserQuestion. Writes identity.md.
    Acceptance: build mode produces a sensible identity.md from 15 answers;
    refine mode picks up at least one stale or missing item from existing identity.md.
 
 3. /aos-load-context + session-start hook
    Hook reads identity + learnings + (if cwd matches) client brand + workflows.
-   /aos-load-context is the manual equivalent.
+   /aos-load-context is the manual equivalent. V5 verifies hook actually fires.
    Acceptance: opening CC in a Comprend repo loads Comprend brand into context.
 
 4. STATE FILES + /aos-tickets + /aos-queue + /aos-status
-   Read-only orchestrator surface. No subagent dispatch yet.
-   Acceptance: /aos-tickets shows my assigned Jira issues grouped by project.
+   Read-only orchestrator surface. /aos-tickets uses AskUserQuestion for clickable
+   selection. /aos-status reads in-flight + queue + recent.
+   Acceptance: /aos-tickets shows my assigned Jira issues grouped by project; queueing works.
 
-5. /aos-start-ticket FULL LIFECYCLE
-   Dispatch, port lock, worktree, mission, run_in_background Agent, SUBMITTED wait,
-   trust-check, approval via SendMessage, ship.
-   Acceptance: a real ticket completes end-to-end through approval and merges.
+5. /aos-start-ticket FULL LIFECYCLE (same-session)
+   Setup: validate no active ticket, allocate port, detached worktree, init state.
+   Hand off to main session by cd-ing into worktree and referencing the ticket ID
+   (jira-ticket auto-triggers).
+   Implementation happens in the session. User runs /aos-submit, /aos-ship, /aos-revise
+   to drive the lifecycle. Automatic suggestion of next queued ticket on /aos-ship.
+   Acceptance: a real ticket completes end-to-end through submit → ship → next ticket
+   suggested. Test live in a real client repo (e.g., catella).
 
-6. /aos-intervene + /aos-park + /aos-resume + /aos-abort
-   Lifecycle controls layered on step 5.
-   Acceptance: a SUBMITTED ticket can be parked and resumed across CC restarts.
+6. /aos-park + /aos-resume + /aos-abort
+   Lifecycle controls. /aos-park saves state and allows /clear; /aos-resume restores into
+   current session; /aos-abort cleans up.
+   Acceptance: a ticket can be parked, /clear runs cleanly, /aos-resume brings it back
+   in a fresh session.
 
 7. /aos-consolidate + /aos-review-stale-learnings
-   Self-improvement loop. Both run in subagents.
-   Acceptance: after a few mock observations in draft, /aos-consolidate produces a sensible promotion.
+   Self-improvement loop. /aos-consolidate runs in a helper subagent for non-interactive
+   layers (A–D in §9.2). Interactive items (E–G) come back to main session.
+   /aos-review-stale-learnings is fully interactive in main session.
+   Acceptance: after a few mock observations in draft, /aos-consolidate produces a
+   sensible promotion. /aos-review-stale-learnings asks per-entry and applies user choices.
 
 8. POLISH
    Real-data scaffolding for Comprend brand + repos.md, sensible defaults in config.json,
-   README, error messages, watchdog tuning.
+   README updates, error messages, the suggest-clear-between-tickets nudge tuning.
 ```
 
 After step 5 the OS is functional for daily use; steps 6–8 make it pleasant.
@@ -604,90 +698,70 @@ After step 5 the OS is functional for daily use; steps 6–8 make it pleasant.
 
 | Risk | Mitigation |
 |---|---|
-| Verification items V1–V5 fail | Each has a documented fallback (see §10). None block v1 entirely. |
-| Subagent token cost in SUBMITTED state higher than expected | Park timeout (4h default) bounds it. Tunable. Worst case: tighten default to 1h. |
-| Approval gate UX feels heavy for trivial tickets | Add a `--auto-approve-on-green` flag to mission template later; off by default in v1. |
-| Dev server collision when subagent and human both try to use a port | Port range is 3001-3099; user keeps 3000. Collision shouldn't occur in normal use. |
-| State file races between parallel subagents (despite locks) | Subagents are forbidden from writing state; only parent mutates. Reduces race surface to "parent vs parent" which the file lock handles. |
+| V4 / V5 fail | Each has a documented fallback (see §10). Neither blocks v1 entirely; they reduce the polish (V4 fail → explicit settings.local.json grant; V5 fail → user must `/aos-load-context` manually after starting CC). |
+| Single active ticket feels too slow vs. true parallelism | Pipeline parallelism is the design choice — the queue pulls next ticket automatically on ship. If the user wants true parallel, they can enable `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and the spec's reserved `experimental.agent_teams_when_enabled` knob (not built in v1). |
+| Multi-ticket context buildup in one session | `suggest_clear_between_tickets` on by default. Memory tiers + claude-mem keep durable knowledge across clears. |
+| Dev server collision when user runs CC outside a worktree on port 3000 | Port range is 3001–3099 for tickets; user's main work keeps 3000. Collision shouldn't occur in normal use. |
+| User runs `/aos-start-ticket` from a worktree of a different ticket | Skill detects: cwd is inside an existing worktree but there's an active ticket already. Refuses with clear error. |
+| Stale state if CC crashes mid-ticket | `state/in-flight.json` retains the entry; on next session start, `/aos-status` will show it. User decides: `/aos-resume` to restore, `/aos-abort` to clean up. |
+| Helper subagent (e.g., /aos-consolidate) hangs or runs forever | Watchdog: `config.intervention.helper_max_runtime_minutes` (default 5). OS suggests `TaskStop` if exceeded. |
 
-## Appendix A — mission.md template
+## Appendix A — setup.md template
+
+Under Shape A there is no "mission for a subagent" — the user's main CC session does the ticket work. `/aos-start-ticket` writes a short `setup.md` to the task scratch dir that captures the ticket's coordinates. The session reads it (or just reads it implicitly via the slash command's output) and proceeds.
 
 ```markdown
-# Mission: <TICKET-ID>
+# Ticket: <TICKET-ID>
 
-Ticket:    <TICKET-ID>  (fetch full details yourself via Atlassian MCP)
 Repo:      <repo-path>
-Worktree:  <worktree-path>
-Port:      <assigned-port>   (use PORT=<port> for dev server)
-
+Worktree:  <worktree-path>      (detached HEAD at main's tip; jira-ticket Step 2 owns branch creation)
+Port:      <assigned-port>      (use PORT=<port> when starting dev server)
+Started:   <ISO timestamp>
 Scratch:   ~/.claude/agentic-os/tasks/<TICKET-ID>/
-           - write notes.md as you work
-           - append one line per significant action to activity.log
-           - write report.md when work is done; enter SUBMITTED state
-           - DO NOT write to ~/.claude/agentic-os/state/*.json
 
-Setup (in order on first turn):
-  1. /aos-load-context        (loads identity + client brand + workflows + learnings)
+## What you (main session) just need to do
 
-  2. Activate the jira-ticket plugin. You can either:
-       (a) Reference <TICKET-ID> in conversation — jira-ticket auto-triggers on
-           the ticket-ID pattern; or
-       (b) Invoke its skill explicitly.
-     Let jira-ticket do its full workflow:
-       - fetch ticket body + acceptance criteria
-       - create/check out the appropriate branch in this worktree. The
-         worktree was created with `--detach` (no branch), so jira-ticket's
-         Step 2 runs on a clean slate: it searches `*<TICKET-ID>*` for an
-         existing branch (yours → check out; someone else's → conflict prompt;
-         none → create `<prefix>/<TICKET-ID>-<short-title>` with the correct
-         prefix per ticket type)
-       - assess complexity and hand off to the appropriate superpowers tier
-       - intervene via AskUserQuestion if the ticket is ambiguous (prefix the
-         question with [<TICKET-ID>] per this template's earlier instruction)
+1. cd <worktree>   (already done by the skill, but worth confirming)
+2. Reference <TICKET-ID> — jira-ticket will auto-trigger and run its Step 1-5 workflow
+   (fetch body, create branch in this detached worktree, transition Jira status,
+   assess complexity, hand off to the appropriate superpowers tier)
+3. Implement, test, iterate. Use the dev server on port <assigned-port> for live testing
+   (set PORT=<port> when starting it).
+4. When done: run /aos-submit. This generates report.md and transitions state to SUBMITTED.
+5. Human reviews. Then run /aos-ship to approve or /aos-revise <feedback> to reject.
 
-  3. Follow jira-ticket's workflow guidance through implementation. The orchestrator
-     does not micromanage what happens inside that workflow — jira-ticket + the
-     selected superpowers tier own the implementation loop.
+## Where to log running notes
 
-  4. When jira-ticket's workflow concludes, return to the orchestrator's wrapping
-     requirements:
-       - Run lint, typecheck, unit, component, browser tests (see §7.4 of the spec).
-       - Write report.md per Appendix B contract.
-       - Enter SUBMITTED state: keep dev server running, wait for SendMessage
-         ("approved" | "rejected with: <feedback>" | "park").
+Append to `notes.md` in this same directory as you work. Anything you'd want to remember
+when revising, or that should feed claude-mem observations, goes there.
 
-Note on the worktree: the worktree at <worktree> was created by the parent
-orchestrator before this subagent was spawned, using `git worktree add --detach`.
-It currently has no branch attached (detached HEAD at main's tip). Branch creation
-is jira-ticket's responsibility in its Step 2, not yours and not the orchestrator's.
-Your `working_directory` is already inside the worktree.
+## Tools available
 
-When you need a human decision:
-  - Prefer AskUserQuestion with 2-4 concrete options.
-  - ALWAYS prefix the question text with your ticket ID in brackets, e.g.:
-      "[<TICKET-ID>] Should null name show 'Welcome back' or 'Welcome back, friend'?"
-    This is non-negotiable. When multiple subagents are running, the prefix is what
-    lets the user tell whose question is whose, regardless of how CC's UI attributes it.
-  - Use it for: design decisions, business rules, ambiguous ticket descriptions,
-    missing credentials.
-  - Do not use it for: technical implementation details you can decide yourself,
-    retrying a flaky test.
-  - After answer, append the Q&A to notes.md for auditability.
+All of CC's tools are available in your main session — AskUserQuestion, EnterPlanMode,
+Read/Write/Edit/Bash, all MCPs (Atlassian, chrome-devtools), all installed plugins
+(jira-ticket, ship-branch). Use them as you normally would.
 
-If you receive SendMessage from parent:
-  - Treat as authoritative; newer than original mission.
-  - Acknowledge in notes.md before changing course.
+## Browser testing (from your global CLAUDE.md)
 
-If all intervention paths fail and you cannot proceed:
-  - Write help-request.md (structured: what you tried, the question, plausible answers).
-  - Write report.md with status: needs_help. Exit.
+1. Prefer mcp__chrome-devtools__* (real CDP emulation; required for media queries).
+2. Fall back to mcp__claude-in-chrome__* if unavailable.
+3. If neither, note explicitly in report.md verification block.
+
+## When this ticket completes (/aos-ship runs)
+
+- The OS will archive this directory to tasks/_archive/<TICKET-ID>/
+- The OS will check the queue. If queued tickets exist, it'll suggest /aos-start-ticket <next>.
+- If `config.session.suggest_clear_between_tickets` is true, it'll suggest /clear before next.
 ```
 
 ## Appendix B — report.md contract
 
+Generated by `/aos-submit` from a template; the main session fills in the verification block based on what was actually tested.
+
 ```yaml
 ticket: <TICKET-ID>
-status: submitted | failed | needs_help | shipped
+status: submitted | shipped | aborted
+submitted_at: <ISO timestamp>
 summary: |
   One paragraph of what was done.
 files_changed:
@@ -731,18 +805,17 @@ state/in-flight.json
   "in_flight": [
     {
       "ticket": "COMP-123",
-      "agent_id": "<canonical id from Agent tool — use for SendMessage>",
-      "display_name": "COMP-123",
+      "state": "RUNNING" | "SUBMITTED" | "PARKED",
       "port": 3017,
       "worktree": "C:\\Workspace\\catella\\.worktrees\\COMP-123",
       "task_dir": "C:\\Users\\Robert\\.claude\\agentic-os\\tasks\\COMP-123",
       "started_at": "...",
-      "status": "running" | "submitted" | "revising" | "approved" | "shipped" | "failed" | "needs_help" | "parked",
-      "submitted_at": null
+      "submitted_at": null,
+      "parked_at": null
     }
   ],
   "recent": [
-    { "ticket": "COMP-100", "status": "shipped", "ended_at": "...", "outcome": "merged" }
+    { "ticket": "COMP-100", "state": "SHIPPED", "ended_at": "...", "outcome": "merged" }
   ]
 }
 
