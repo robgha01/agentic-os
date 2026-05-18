@@ -77,11 +77,17 @@ The OS is published as one plugin entry in `claude-plugins\.claude-plugin\market
   "name": "agentic-os",
   "description": "Personal agentic workflow OS — orchestrator, memory, learning loop.",
   "category": "productivity",
-  "source": { "source": "github", "repo": "robgha01/agentic-os" }
+  "source": {
+    "source": "git-subdir",
+    "url": "https://github.com/robgha01/agentic-os.git",
+    "path": "plugin"
+  }
 }
 ```
 
-If external `source` is unsupported on the user's Claude Code version, fallback is a new dedicated marketplace registered in `~/.claude/settings.json`, pointing at the agentic-os repo. The repo split (agentic-os in its own repo) is preserved in both paths.
+We use `git-subdir` (not `github`) because the plugin lives in a subdirectory of the repo (`plugin/`). The `github` source type does not accept a `path` field — it expects the plugin at the repo root. Anthropic's official marketplace uses `git-subdir` for this exact pattern (e.g., the `42Crunch-AI` plugin entry).
+
+Fallback (unused — V1 verified by reference to Anthropic's official marketplace which uses these shapes in production): a new dedicated marketplace registered in `~/.claude/settings.json`, pointing at the agentic-os repo. The repo split is preserved in both paths.
 
 ### 3.2 Composition with existing plugins
 
