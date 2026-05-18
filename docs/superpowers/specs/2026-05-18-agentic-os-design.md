@@ -12,7 +12,7 @@
 Build a personal agentic operating system that gives me a centralized, improvable workflow on top of Claude Code. The OS removes four recurring frictions and adds one new capability:
 
 - **Re-explaining context every session** — fixed by a global identity layer, per-client brand/workflow context, and a session-start hook that loads the right slice automatically.
-- **Cross-session forgetting** — fixed by a curated `learnings.md` index plus a draft/aos-consolidate/archive loop that compresses raw observations into durable rules without context rot.
+- **Cross-session forgetting** — fixed by a curated `learnings.md` index plus a draft/consolidate/archive loop that compresses raw observations into durable rules without context rot.
 - **Outputs scattered + inconsistent** — fixed by deterministic paths under `~/.claude/agentic-os/` (memory, state, task scratch) and explicit conventions enforced by the orchestrator.
 - **Skills don't compose** — fixed by an orchestrator that wraps the existing public plugins (`jira-ticket`, `ship-branch`, `claude-mem`) without modifying them.
 - **New capability: parallel Jira ticket workflows.** Multiple subagents dispatched on per-ticket git worktrees with isolated dev servers, live human intervention via `AskUserQuestion` / `SendMessage`, and an explicit approval gate before ship.
