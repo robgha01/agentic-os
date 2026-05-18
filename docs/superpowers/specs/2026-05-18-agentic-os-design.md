@@ -522,8 +522,9 @@ These exist as design assumptions. Each must be empirically confirmed before rel
 | V3 | A subagent calling `AskUserQuestion` routes the question to the parent's UI when the parent is in an interactive session, AND the UI makes the source subagent identifiable | Spawn a background subagent (with `description: "TEST-A"`) that immediately calls AskUserQuestion; observe whether the UI shows "TEST-A" as the source. Then spawn two concurrent background subagents (`TEST-A`, `TEST-B`) both calling AskUserQuestion within seconds — confirm: (a) CC queues / shows / drops them, (b) the user can tell which agent's question is which. If attribution is unclear, the `[<TICKET-ID>]` prefix in the mission template (see Appendix A) is load-bearing | Subagents emit help-request.md only; no live AskUserQuestion from subagents |
 | V4 | Subagents can Read/Write to `~/.claude/agentic-os/` under default Claude Code permissions (or the install step's pre-granted Write rule covers it) | Spawn subagent that writes to `~/.claude/agentic-os/tasks/test/note.md`; confirm | `/aos-install` adds explicit Write/Edit rules to settings.local.json scoped to `~/.claude/agentic-os/**` |
 | V5 | Claude Code plugins can ship a SessionStart hook that fires on every session in any directory | Add a session-start.ps1 that writes a timestamp to a known file; reload plugins; open CC in three different directories; verify | Provide `/aos-load-context` as the manual entry point; document the requirement to run it after starting CC in client repos |
+| V6 | Plugins / skills (specifically jira-ticket) auto-trigger inside Agent-tool subagent contexts when the trigger pattern (ticket ID) appears in the mission prompt | Dispatch a subagent with the mission text containing "COMP-NNN" (a real ticket ID); observe whether jira-ticket activates and runs its workflow. If activation isn't automatic, test explicit invocation via the skill mechanism. Also verify: jira-ticket's branch-creation dedup logic correctly detects the orchestrator-created branch and does not try to re-create it | Subagents call Atlassian MCP directly and re-implement the parts of jira-ticket we need (ticket fetch, basic dedup). Real loss — we'd duplicate jira-ticket's logic and risk drift. |
 
-V1, V2, V3, V4, V5 are step 0 of implementation per §11.
+V1, V2, V3, V4, V5, V6 are step 0 of implementation per §11.
 
 ## 11. Build order (v1 scope)
 
@@ -619,13 +620,35 @@ Scratch:   ~/.claude/agentic-os/tasks/<TICKET-ID>/
 
 Setup (in order on first turn):
   1. /aos-load-context        (loads identity + client brand + workflows + learnings)
-  2. Fetch <TICKET-ID> via Atlassian MCP for full body + acceptance criteria.
-  3. Plan; communicate plan in notes.md before implementing.
-  4. Implement.
-  5. Run lint, typecheck, unit, component, browser tests (see §7.4 of the spec).
-  6. Write report.md per Appendix B contract.
-  7. Enter SUBMITTED state: keep dev server running, wait for SendMessage("approved")
-     or SendMessage("rejected with: <feedback>").
+
+  2. Activate the jira-ticket plugin. You can either:
+       (a) Reference <TICKET-ID> in conversation — jira-ticket auto-triggers on
+           the ticket-ID pattern; or
+       (b) Invoke its skill explicitly.
+     Let jira-ticket do its full workflow:
+       - fetch ticket body + acceptance criteria
+       - verify the branch (the orchestrator has already created the worktree at
+         <worktree> with a feature branch checked out; jira-ticket's dedup logic
+         should detect the existing branch and continue without re-creating it)
+       - assess complexity and hand off to the appropriate superpowers tier
+       - intervene via AskUserQuestion if the ticket is ambiguous (prefix the
+         question with [<TICKET-ID>] per this template's earlier instruction)
+
+  3. Follow jira-ticket's workflow guidance through implementation. The orchestrator
+     does not micromanage what happens inside that workflow — jira-ticket + the
+     selected superpowers tier own the implementation loop.
+
+  4. When jira-ticket's workflow concludes, return to the orchestrator's wrapping
+     requirements:
+       - Run lint, typecheck, unit, component, browser tests (see §7.4 of the spec).
+       - Write report.md per Appendix B contract.
+       - Enter SUBMITTED state: keep dev server running, wait for SendMessage
+         ("approved" | "rejected with: <feedback>" | "park").
+
+Note on the worktree: the worktree at <worktree> and its feature branch were
+created by the parent orchestrator before this subagent was spawned. You do not
+need to (and must not) re-create them. Your `working_directory` is already
+inside the worktree.
 
 When you need a human decision:
   - Prefer AskUserQuestion with 2-4 concrete options.
