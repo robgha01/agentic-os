@@ -227,13 +227,14 @@ This keeps parent context budget low across many dispatches in one session.
 [6] RECORD    Append to state/in-flight.json with agent_id placeholder.
 
 [7] DISPATCH  Agent({
+                description: "<TICKET-ID>",         // visible name in CC UI; e.g., "COMP-123"
                 isolation: "worktree",
                 working_directory: <worktree>,
                 run_in_background: true,
-                prompt: "Read ~/.claude/agentic-os/tasks/COMP-123/mission.md and execute it.
+                prompt: "Read ~/.claude/agentic-os/tasks/<TICKET-ID>/mission.md and execute it.
                          Begin with /aos-load-context. End by writing report.md and entering SUBMITTED."
               })
-              Capture agent_id; update in-flight.json.
+              Capture agent_id; update in-flight.json with both agent_id and display_name (= ticket ID).
 
 [8] (parent yields; can dispatch more or do other work)
 
@@ -485,7 +486,7 @@ These exist as design assumptions. Each must be empirically confirmed before rel
 |---|---|---|---|
 | V1 | Marketplace `source` field supports `{ "source": "github", "repo": "..." }` for plugins in a different repo | Add a tiny no-op plugin entry pointing at any external repo; verify install works | Use a separate marketplace (Option C from design discussion); preserves repo split |
 | V2 | A subagent dispatched via `Agent` tool with `run_in_background: true` produces an agent_id that `SendMessage` can target while the subagent is still running | Spawn a background agent that loops every 30s reading `tasks/<id>/control.json`; SendMessage it; confirm it receives and acts | Demote intervention to Level 3 only (help-request file + kill/aos-resume); document UX impact in v1 |
-| V3 | A subagent calling `AskUserQuestion` routes the question to the parent's UI when the parent is in an interactive session | Spawn a background subagent that immediately calls AskUserQuestion; observe parent UI. Also test two concurrent background subagents both calling AskUserQuestion within seconds — confirm whether CC queues them, shows both, or drops one | Subagents emit help-request.md only; no live AskUserQuestion from subagents |
+| V3 | A subagent calling `AskUserQuestion` routes the question to the parent's UI when the parent is in an interactive session, AND the UI makes the source subagent identifiable | Spawn a background subagent (with `description: "TEST-A"`) that immediately calls AskUserQuestion; observe whether the UI shows "TEST-A" as the source. Then spawn two concurrent background subagents (`TEST-A`, `TEST-B`) both calling AskUserQuestion within seconds — confirm: (a) CC queues / shows / drops them, (b) the user can tell which agent's question is which. If attribution is unclear, the `[<TICKET-ID>]` prefix in the mission template (see Appendix A) is load-bearing | Subagents emit help-request.md only; no live AskUserQuestion from subagents |
 | V4 | Subagents can Read/Write to `~/.claude/agentic-os/` under default Claude Code permissions (or the install step's pre-granted Write rule covers it) | Spawn subagent that writes to `~/.claude/agentic-os/tasks/test/note.md`; confirm | `/aos-install` adds explicit Write/Edit rules to settings.local.json scoped to `~/.claude/agentic-os/**` |
 | V5 | Claude Code plugins can ship a SessionStart hook that fires on every session in any directory | Add a session-start.ps1 that writes a timestamp to a known file; reload plugins; open CC in three different directories; verify | Provide `/aos-load-context` as the manual entry point; document the requirement to run it after starting CC in client repos |
 
@@ -595,6 +596,10 @@ Setup (in order on first turn):
 
 When you need a human decision:
   - Prefer AskUserQuestion with 2-4 concrete options.
+  - ALWAYS prefix the question text with your ticket ID in brackets, e.g.:
+      "[<TICKET-ID>] Should null name show 'Welcome back' or 'Welcome back, friend'?"
+    This is non-negotiable. When multiple subagents are running, the prefix is what
+    lets the user tell whose question is whose, regardless of how CC's UI attributes it.
   - Use it for: design decisions, business rules, ambiguous ticket descriptions,
     missing credentials.
   - Do not use it for: technical implementation details you can decide yourself,
@@ -658,7 +663,8 @@ state/in-flight.json
   "in_flight": [
     {
       "ticket": "COMP-123",
-      "agent_id": "<from Agent tool>",
+      "agent_id": "<canonical id from Agent tool — use for SendMessage>",
+      "display_name": "COMP-123",
       "port": 3017,
       "worktree": "C:\\Workspace\\catella\\.worktrees\\COMP-123",
       "task_dir": "C:\\Users\\Robert\\.claude\\agentic-os\\tasks\\COMP-123",
