@@ -2,21 +2,46 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Verify the six platform assumptions our spec relies on, then ship the agentic-os plugin scaffold, its `/aos-install` first-run wizard, and the `/aos-identity` interview that produces a real `identity.md`. After this plan you have an installable plugin and a populated personal data tree at `~/.claude/agentic-os/`.
+**Goal:** Ship the agentic-os plugin scaffold, its `/aos-install` first-run wizard, and the `/aos-identity` interview that produces a real `identity.md`. After this plan you have an installable plugin and a populated personal data tree at `~/.claude/agentic-os/`.
 
-**Architecture:** Claude Code plugin developed in `C:\Workspace\agentic-os\plugin\`, distributed via the existing `robert-personal` marketplace as an external GitHub source. Personal mutable data lives at `~/.claude/agentic-os/` outside the plugin cache so updates never overwrite it.
+**Architecture:** Claude Code plugin developed in `C:\Workspace\agentic-os\plugin\`, distributed via the existing `robert-personal` marketplace using a `git-subdir` source. Personal mutable data lives at `~/.claude/agentic-os/` outside the plugin cache so updates never overwrite it.
 
 **Tech Stack:** Claude Code plugin format (`.claude-plugin/plugin.json`, `skills/<name>/SKILL.md`), PowerShell + Git Bash for hooks/scripts (Windows host), Jira via the Atlassian MCP server (already configured).
 
-**Spec reference:** `docs/superpowers/specs/2026-05-18-agentic-os-design.md` — sections §10 (V1–V6), §11 (build steps 1, 2, 2.5), §3 (architecture), §4 (memory layout), §5.1 (skill catalog), Appendix D (`/aos-identity` interview contract).
+**Spec reference:** `docs/superpowers/specs/2026-05-18-agentic-os-design.md` — see the architecture revision note at the top of the spec.
 
 ---
 
-## Phase 0 — Smoke Tests (V1–V6)
+## Plan revision — 2026-05-19
 
-Each smoke test validates one platform assumption from spec §10. If a test fails, the documented fallback in §10 applies and we update the spec before continuing. Phase 0 produces no plugin code — it's pure de-risking.
+Phase 0 smoke tests V1–V3 ran and resulted in an architectural pivot from the original subagent-dispatch design to **Shape A — same-session pipeline** (see spec architecture revision note). Status of each item under the revised plan:
 
-**Order matters slightly**: V1 first (marketplace plumbing) because everything else depends on installing plugins. V2 and V3 can be done in either order. V4 needs an Agent dispatch so can piggyback on V2. V5 only matters if we ship a hook (we do). V6 has the broadest impact (jira-ticket auto-trigger from inside subagents).
+| Task | Original goal | Current status |
+|---|---|---|
+| 0.1 | V1 marketplace external source | **DONE — PASS** (verified by docs reference; spec corrected to use `git-subdir`). Skip when re-executing. |
+| 0.2 | V2 SendMessage to background subagent | **DONE — FAIL** (gated behind experimental flag; arch pivot applied). Skip when re-executing. |
+| 0.3 | V3 AskUserQuestion from subagent | **DONE — FAIL** (Issue #34592 closed as "not planned"; arch pivot applied). Skip when re-executing. |
+| 0.4 | V4 subagent writes to ~/.claude/agentic-os/ | **TODO — reduced scope.** Only relevant for helper subagents (`/aos-consolidate`, optional research/test helpers). Test these specific cases, not "subagents writing during ticket work" (we don't dispatch subagents for ticket work anymore). |
+| 0.5 | V5 plugin SessionStart hook fires globally | **TODO — unchanged scope.** Hook is core to Shape A (it's how identity + client context auto-load in any session). |
+| 0.6 | V6 jira-ticket auto-trigger inside subagent | **REMOVED.** Not applicable — under Shape A, jira-ticket runs in the user's main session. Skip the whole task. |
+| 0.7 | Phase 0 wrap-up | Use the existing `docs/superpowers/plans/smoke-results.md` (already records V1/V2/V3 outcomes and the arch pivot). For V4/V5 just append rows when done. |
+| 1.1–1.5 | Plugin scaffold (dirs, manifest, README, marketplace, templates) | **No change.** All file paths and content valid. Proceed as written. Note: marketplace entry now uses `git-subdir` source (already updated in spec §3.1). |
+| 1.6–1.8 | `/aos-install` skill + verification | **No change.** Same scaffolding behavior. |
+| 1.9 | `/aos-identity` SKILL.md | **Minor wording change.** Under Shape A the skill runs the interactive 15-question pass directly in the main session (AskUserQuestion is available there). Refine-mode's "read claude-mem + draft observations" portion can be done in a helper subagent for cleanliness, but it's optional — doing it all in main session is fine too. |
+| 1.10–1.11 | Verify `/aos-identity` modes | **No change** to verification approach. |
+| 1.12 | Phase 1 wrap-up | **No change.** Same README + tag + push. |
+
+When resuming execution from this plan, start at **Task 0.4** (V4 helper-subagent write test) or skip directly to **Task 1.1** if you want to verify V4/V5 inline during Phase 1 (V4 naturally tests itself when `/aos-consolidate` first runs; V5 tests itself when the session-start hook is first installed). Tasks 0.1–0.3 and 0.6 should not be re-run.
+
+Phase 2 (the `/aos-start-ticket` Shape A lifecycle: setup → main-session implementation → `/aos-submit` → `/aos-ship` → auto-handoff) will be written as a separate plan document. This Phase 0+1 plan stops at "plugin installable + personal data scaffolded + identity populated."
+
+---
+
+## Phase 0 — Smoke Tests (V1–V6) [REVISED]
+
+Original tasks below. Under the 2026-05-19 revision, only V4 and V5 remain. Tasks 0.1, 0.2, 0.3 are kept here for historical reference only — do not re-run them. Task 0.6 is removed entirely.
+
+**Original Order rationale (still mostly valid for V4/V5)**: V4 and V5 can be done in either order. V5 only matters if we ship a hook (we do). V4 is most cheaply tested by the in-Phase-1 work itself.
 
 ### Task 0.1: V1 — External marketplace source supported
 
