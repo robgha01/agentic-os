@@ -33,3 +33,10 @@ build/
 .env
 .env.local
 .env.*.local
+
+# Brainstorming companion (visual mockups)
+.superpowers/
+
+# Agentic OS task scratch + coordination state (ephemeral)
+.agentic-os/tasks/
+.agentic-os/state/
