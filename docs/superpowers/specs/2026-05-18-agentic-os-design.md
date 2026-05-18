@@ -261,8 +261,8 @@ This keeps parent context budget low across many dispatches in one session.
 
 [14] CLEANUP  Parent moves tasks/COMP-123/ to tasks/_archive/COMP-123/.
               If queue has items and slot is free, dequeue and dispatch next.
-              Check consolidation thresholds (see §9.2 Triggers); suggest or
-              auto-run /aos-consolidate per config.
+              Check consolidation thresholds (see §9.2 Triggers); auto-dispatch
+              /aos-consolidate (non-interactive) per config.memory.consolidate_mode.
 ```
 
 ### 5.4 Mission file (`mission.md`) template
@@ -389,6 +389,7 @@ Single file at `~/.claude/agentic-os/config.json`, scaffolded by `/aos-install` 
     "learnings_md_max_lines": 150,
     "promotion_threshold": 3,
     "stale_review_days": 90,
+    "consolidate_mode": "auto-non-interactive",
     "auto_consolidate_suggest_drafts": 10,
     "auto_consolidate_suggest_at_cap_percent": 95
   },
@@ -397,7 +398,6 @@ Single file at `~/.claude/agentic-os/config.json`, scaffolded by `/aos-install` 
     "subagent_total_runtime_max_minutes": 60
   },
   "ship": {
-    "auto_run_consolidate_on_completion": false,
     "create_pr_after_approval": false
   },
   "experimental": {
@@ -444,31 +444,42 @@ INPUT
   learnings/<topic>.md (deep content)
 
 DECISIONS
-  1. Drafts with 3+ occurrences across projects/sessions → promote to learnings.md + learnings/<topic>.md
-  2. Drafts that are project-specific → move to that project's CLAUDE.md or auto-memory
-  3. Drafts that contradict existing rules → surface conflict via AskUserQuestion
-  4. Curated rules > stale_review_days old → archive candidate
-  5. learnings.md > learnings_md_max_lines → merge or demote weakest entries
+  Non-interactive (always safe to auto-run):
+    A. Drafts with 3+ occurrences and no conflict with existing rules → promote
+    B. Drafts that are clearly project-specific → move to that project's CLAUDE.md or auto-memory
+    C. Curated rules where frontmatter says confidence: high AND last_validated > stale_review_days × 2
+       → archive automatically (high-confidence rules that haven't been touched in a long time
+       are either deeply true or completely irrelevant — either way, archiving them is reversible)
+    D. learnings.md > learnings_md_max_lines → merge or demote weakest entries (lowest confidence first)
+
+  Interactive (requires AskUserQuestion — DEFERRED in auto-non-interactive mode):
+    E. Drafts that contradict existing curated rules → ask which wins
+    F. Drafts ambiguous between project-specific and cross-project → ask the scope
+    G. Curated rules that are stale but NOT high-confidence → ask "still true?"
 
 OUTPUT
   Updated learnings.md (capped, fresh)
-  Updated learnings/<topic>.md
-  Cleared/rewritten learnings.draft.md
-  archive/<date>-<topic>.md for demoted rules
-  Short summary report to parent
+  Updated learnings/<topic>.md (only for non-deferred entries when auto-running)
+  Cleared/rewritten learnings.draft.md (deferred items remain in draft, tagged for next manual run)
+  archive/<date>-<topic>.md for demoted/auto-archived rules
+  Short summary report to parent including: actions taken, items deferred (N)
 ```
 
 #### Triggers
 
-Three layered triggers determine when `/aos-consolidate` runs. The user is never silently surprised; the orchestrator only auto-mutates when an explicit config flag opts in.
+Three modes determine when and how `/aos-consolidate` runs. The mode is set via `config.memory.consolidate_mode`.
 
-| Trigger | Default | Action |
+| Mode (config value) | Default? | Behavior |
 |---|---|---|
-| **Soft auto-detect** | ON | After every ship (§5.3 step [14]) and on every `/aos-status`, the orchestrator cheaply checks: `learnings.draft.md` line count > `config.memory.auto_consolidate_suggest_drafts`, or `learnings.md` line count > `config.memory.auto_consolidate_suggest_at_cap_percent` × `learnings_md_max_lines`. If either, surface a suggestion ("Drafts piled up — run `/aos-consolidate`?"). No mutation. |
-| **Hard auto-run** | OFF (via `config.ship.auto_run_consolidate_on_completion`) | When the flag is true, the orchestrator dispatches `/aos-consolidate` automatically after every successful ship. Subagent runs out of band; parent context cost is minimal. |
-| **Manual** | Always available | User types `/aos-consolidate` at any time. |
+| `auto-non-interactive` | **DEFAULT** | After every ship (§5.3 step [14]) and on every `/aos-status`, orchestrator cheaply checks: `learnings.draft.md` line count > `config.memory.auto_consolidate_suggest_drafts`, OR `learnings.md` line count > `config.memory.auto_consolidate_suggest_at_cap_percent` × `learnings_md_max_lines`. If either, **dispatch `/aos-consolidate` automatically in a subagent**. Subagent does only decisions A–D; defers E–G to the manual flow. User sees the summary in `/aos-status` ("12 drafts promoted; 2 items deferred — run `/aos-consolidate` to resolve"). |
+| `auto-full` | opt-in | Same triggers, but subagent also resolves E–G interactively via `AskUserQuestion`. Questions appear in the UI as they arise; user answers when ready. Most aggressive — turn this on once you trust the consolidation behavior on your data. |
+| `suggest` | opt-in | The "tell me but don't act" behavior. Orchestrator only surfaces a suggestion ("Drafts piled up — run `/aos-consolidate`?"). Never auto-runs. For users who want full manual control. |
 
-The default of "soft suggest" exists because consolidation can be interactive (drafts contradicting curated rules prompts `AskUserQuestion`). Auto-running mid-flow would pop interactive UI uninvited. Once a user trusts the consolidation behavior on their data, flipping `auto_run_consolidate_on_completion` to `true` is the natural next step.
+The user types `/aos-consolidate` manually at any time, in any mode — that always does the full A–G pass interactively. The mode only governs the *automatic* behavior.
+
+#### Why `auto-non-interactive` is the default
+
+The OS is supposed to keep itself tidy without the user having to remember. Routine consolidation (drafts piling up, clearly cross-project patterns, stale high-confidence rules) doesn't need human judgment — those are mechanical. Only when there's a real judgment call (conflicts, ambiguous scope) does the user need to be pulled in. Auto-non-interactive does the boring work silently and defers the genuinely-needs-you items to the next manual run.
 
 ### 9.3 `/aos-review-stale-learnings` workflow
 
