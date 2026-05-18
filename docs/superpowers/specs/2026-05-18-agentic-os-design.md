@@ -261,6 +261,8 @@ This keeps parent context budget low across many dispatches in one session.
 
 [14] CLEANUP  Parent moves tasks/COMP-123/ to tasks/_archive/COMP-123/.
               If queue has items and slot is free, dequeue and dispatch next.
+              Check consolidation thresholds (see §9.2 Triggers); suggest or
+              auto-run /aos-consolidate per config.
 ```
 
 ### 5.4 Mission file (`mission.md`) template
@@ -386,7 +388,9 @@ Single file at `~/.claude/agentic-os/config.json`, scaffolded by `/aos-install` 
   "memory": {
     "learnings_md_max_lines": 150,
     "promotion_threshold": 3,
-    "stale_review_days": 90
+    "stale_review_days": 90,
+    "auto_consolidate_suggest_drafts": 10,
+    "auto_consolidate_suggest_at_cap_percent": 95
   },
   "intervention": {
     "watchdog_inactivity_minutes": 15,
@@ -454,12 +458,30 @@ OUTPUT
   Short summary report to parent
 ```
 
+#### Triggers
+
+Three layered triggers determine when `/aos-consolidate` runs. The user is never silently surprised; the orchestrator only auto-mutates when an explicit config flag opts in.
+
+| Trigger | Default | Action |
+|---|---|---|
+| **Soft auto-detect** | ON | After every ship (§5.3 step [14]) and on every `/aos-status`, the orchestrator cheaply checks: `learnings.draft.md` line count > `config.memory.auto_consolidate_suggest_drafts`, or `learnings.md` line count > `config.memory.auto_consolidate_suggest_at_cap_percent` × `learnings_md_max_lines`. If either, surface a suggestion ("Drafts piled up — run `/aos-consolidate`?"). No mutation. |
+| **Hard auto-run** | OFF (via `config.ship.auto_run_consolidate_on_completion`) | When the flag is true, the orchestrator dispatches `/aos-consolidate` automatically after every successful ship. Subagent runs out of band; parent context cost is minimal. |
+| **Manual** | Always available | User types `/aos-consolidate` at any time. |
+
+The default of "soft suggest" exists because consolidation can be interactive (drafts contradicting curated rules prompts `AskUserQuestion`). Auto-running mid-flow would pop interactive UI uninvited. Once a user trusts the consolidation behavior on their data, flipping `auto_run_consolidate_on_completion` to `true` is the natural next step.
+
 ### 9.3 `/aos-review-stale-learnings` workflow
 
 Subagent reads `learnings.md` frontmatter (`last_validated`, `confidence`). For entries beyond `stale_review_days`:
 
 - Use `AskUserQuestion` per entry: "still true? archive? update?"
 - Apply user's choice, update or move to archive
+
+#### Triggers
+
+**Soft suggest only.** On every `/aos-status`, the orchestrator checks: when was the last stale-review? If `now - last_review > stale_review_days`, surface a suggestion ("It's been N days since the last stale-learnings review — run `/aos-review-stale-learnings`?"). No hard auto-run knob because the workflow is interactive per-entry (`AskUserQuestion`) and silent auto-invocation would interrupt without warning.
+
+The orchestrator records `state/last_stale_review.json` with a single timestamp; updated each time `/aos-review-stale-learnings` completes.
 
 Frontmatter convention per curated learning (in `learnings/<topic>.md`):
 
