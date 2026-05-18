@@ -85,7 +85,7 @@ If external `source` is unsupported on the user's Claude Code version, fallback 
 
 ### 3.2 Composition with existing plugins
 
-- `jira-ticket` — invoked unchanged from inside subagents for ticket workflows. The OS calls it; never wraps or forks.
+- `jira-ticket` — invoked unchanged from inside subagents for ticket workflows. The OS calls it; never wraps or forks. Branch creation and dedup are entirely jira-ticket's responsibility — the orchestrator creates a detached worktree and lets jira-ticket's Step 2 own the branch.
 - `ship-branch` — invoked by subagents during the SHIPPED phase per the client's configured ship strategy.
 - `claude-mem` — continues to capture per-project observations on its own. The OS reads observations indirectly through Claude's existing surface, never directly.
 - `superpowers` — used at design time (brainstorming, writing-plans, executing-plans). Not invoked at runtime by the OS.
@@ -218,9 +218,11 @@ This keeps parent context budget low across many dispatches in one session.
               Claim it: { owner: "ticket-COMP-123", since: now }.
               Release lock.
 
-[4] WORKTREE  git worktree add C:\Workspace\<repo>\.worktrees\COMP-123
-              Branch name: if jira-ticket exposes a callable branch-name helper, use it;
-              otherwise default to feature/<TICKET-ID>-<slug-of-title>.
+[4] WORKTREE  git -C C:\Workspace\<repo> worktree add --detach \
+                  C:\Workspace\<repo>\.worktrees\<TICKET-ID> main
+              Detached worktree at main's tip; NO branch is created here.
+              Branch creation is jira-ticket's responsibility (Step 2 of its workflow)
+              and happens inside the subagent's first turn.
 
 [5] MISSION   Write ~/.claude/agentic-os/tasks/COMP-123/mission.md (tiny, ~30 lines, see Appendix A).
 
@@ -302,7 +304,7 @@ Watchdog is implemented as occasional small polls of the activity log: parent ch
 
 - Mechanical errors: no retry. Deterministic; user must adjust input.
 - Subagent test/lint failures: subagent has its own internal retry budget per its mission. Parent does not retry these at the orchestrator level.
-- Agent tool infrastructure errors: parent retries dispatch once. Retry semantics: remove the failed worktree (`git worktree remove --force`), release the port back to `state/ports.json`, then re-run the full dispatch flow from §5.3 step 3. If second attempt fails, surface to user with both error messages.
+- Agent tool infrastructure errors: parent retries dispatch once. Retry semantics: remove the failed worktree (`git worktree remove --force`) — note the worktree is detached, no branch cleanup needed since jira-ticket hadn't yet created one — release the port back to `state/ports.json`, then re-run the full dispatch flow from §5.3 step 3. If second attempt fails, surface to user with both error messages.
 
 ## 7. Subagent lifecycle and testing
 
@@ -627,9 +629,12 @@ Setup (in order on first turn):
        (b) Invoke its skill explicitly.
      Let jira-ticket do its full workflow:
        - fetch ticket body + acceptance criteria
-       - verify the branch (the orchestrator has already created the worktree at
-         <worktree> with a feature branch checked out; jira-ticket's dedup logic
-         should detect the existing branch and continue without re-creating it)
+       - create/check out the appropriate branch in this worktree. The
+         worktree was created with `--detach` (no branch), so jira-ticket's
+         Step 2 runs on a clean slate: it searches `*<TICKET-ID>*` for an
+         existing branch (yours → check out; someone else's → conflict prompt;
+         none → create `<prefix>/<TICKET-ID>-<short-title>` with the correct
+         prefix per ticket type)
        - assess complexity and hand off to the appropriate superpowers tier
        - intervene via AskUserQuestion if the ticket is ambiguous (prefix the
          question with [<TICKET-ID>] per this template's earlier instruction)
@@ -645,10 +650,11 @@ Setup (in order on first turn):
        - Enter SUBMITTED state: keep dev server running, wait for SendMessage
          ("approved" | "rejected with: <feedback>" | "park").
 
-Note on the worktree: the worktree at <worktree> and its feature branch were
-created by the parent orchestrator before this subagent was spawned. You do not
-need to (and must not) re-create them. Your `working_directory` is already
-inside the worktree.
+Note on the worktree: the worktree at <worktree> was created by the parent
+orchestrator before this subagent was spawned, using `git worktree add --detach`.
+It currently has no branch attached (detached HEAD at main's tip). Branch creation
+is jira-ticket's responsibility in its Step 2, not yours and not the orchestrator's.
+Your `working_directory` is already inside the worktree.
 
 When you need a human decision:
   - Prefer AskUserQuestion with 2-4 concrete options.
