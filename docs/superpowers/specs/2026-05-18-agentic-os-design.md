@@ -12,7 +12,7 @@
 Build a personal agentic operating system that gives me a centralized, improvable workflow on top of Claude Code. The OS removes four recurring frictions and adds one new capability:
 
 - **Re-explaining context every session** — fixed by a global identity layer, per-client brand/workflow context, and a session-start hook that loads the right slice automatically.
-- **Cross-session forgetting** — fixed by a curated `learnings.md` index plus a draft/consolidate/archive loop that compresses raw observations into durable rules without context rot.
+- **Cross-session forgetting** — fixed by a curated `learnings.md` index plus a draft/aos-consolidate/archive loop that compresses raw observations into durable rules without context rot.
 - **Outputs scattered + inconsistent** — fixed by deterministic paths under `~/.claude/agentic-os/` (memory, state, task scratch) and explicit conventions enforced by the orchestrator.
 - **Skills don't compose** — fixed by an orchestrator that wraps the existing public plugins (`jira-ticket`, `ship-branch`, `claude-mem`) without modifying them.
 - **New capability: parallel Jira ticket workflows.** Multiple subagents dispatched on per-ticket git worktrees with isolated dev servers, live human intervention via `AskUserQuestion` / `SendMessage`, and an explicit approval gate before ship.
@@ -54,7 +54,7 @@ The OS is a Claude Code plugin distributed via the existing `robert-personal` ma
 │ ~/.claude/agentic-os/                                                       │
 │   identity.md              T1 always-loaded                                 │
 │   learnings.md             T1 curated index (cap ~150 lines)                │
-│   learnings.draft.md       raw captures (fuel for /consolidate)             │
+│   learnings.draft.md       raw captures (fuel for /aos-consolidate)             │
 │   learnings/<topic>.md     T1 deep, on-demand                               │
 │   archive/                 superseded learnings                             │
 │   clients/<client>/        T2 per-client (brand, workflows, repos)          │
@@ -96,19 +96,19 @@ Four tiers plus a separate runtime-state surface. Memory and state are distinct 
 
 ### 4.1 Tier 1 — Global, always-loaded
 
-Read on every session start by the session-start hook (or by `/load-context` if the hook hasn't fired). Capped to keep parent context lean.
+Read on every session start by the session-start hook (or by `/aos-load-context` if the hook hasn't fired). Capped to keep parent context lean.
 
 | File | Purpose | Cap |
 |---|---|---|
 | `identity.md` | Who you are, working style, voice | ~few dozen lines |
-| `learnings.md` | Curated cross-project rules; index of `[[wikilinks]]` to deep content | ~150 lines (enforced by `/consolidate`) |
+| `learnings.md` | Curated cross-project rules; index of `[[wikilinks]]` to deep content | ~150 lines (enforced by `/aos-consolidate`) |
 
 ### 4.2 Tier 1 deep + draft (on-demand or raw)
 
 | File | Purpose |
 |---|---|
 | `learnings/<topic>.md` | Deep content for a curated rule; loaded only when referenced |
-| `learnings.draft.md` | Raw, append-only captures; fuel for `/consolidate` |
+| `learnings.draft.md` | Raw, append-only captures; fuel for `/aos-consolidate` |
 | `archive/<date>-<topic>.md` | Superseded curated rules; searchable, never auto-loaded |
 
 ### 4.3 Tier 2 — Client, loaded when cwd matches
@@ -135,7 +135,7 @@ The agentic OS does not own these. They continue to work as today.
 
 | File | Owner | Purpose |
 |---|---|---|
-| `tasks/<ticket>/mission.md` | Parent writes initially; appends on `/resume` and on rejection feedback | Pointers + constraints (NOT inlined content) |
+| `tasks/<ticket>/mission.md` | Parent writes initially; appends on `/aos-resume` and on rejection feedback | Pointers + constraints (NOT inlined content) |
 | `tasks/<ticket>/notes.md` | Subagent writes | Running narrative |
 | `tasks/<ticket>/activity.log` | Subagent appends per action | One line per significant action; for cheap monitoring |
 | `tasks/<ticket>/report.md` | Subagent writes on SUBMITTED | Structured verification + outcome |
@@ -165,20 +165,21 @@ All slash commands ship as skills under `plugin/skills/`. The orchestrator skill
 
 | Command | Surface | Purpose |
 |---|---|---|
-| `/install-agentic-os` | any | First-run: scaffold `~/.claude/agentic-os/` from templates, pre-grant Write permission |
-| `/load-context` | any | Read identity, learnings, and (if cwd matches) client brand + workflows into current conversation |
-| `/tickets` | agentic-os | List Jira tickets assigned to user, grouped by project, with in-flight markers; then present the list via `AskUserQuestion` so each ticket is a clickable option to start or queue (no typing IDs). Re-run for a fresh snapshot — live updates are the phase-2 web UI's job. |
-| `/queue COMP-123` | any | Validate ticket exists, append to `state/queue.json` |
-| `/start-ticket COMP-123` | agentic-os | Full dispatch (see §5.3) |
-| `/status` | any | Show in-flight workers + recent completions + queue |
-| `/intervene COMP-123 <message>` | agentic-os | `SendMessage` to a running subagent with new guidance |
-| `/park COMP-123` | agentic-os | Gracefully exit a SUBMITTED subagent; retain worktree for later resume |
-| `/resume COMP-123` | agentic-os | Re-spawn a subagent against a previously-parked worktree |
-| `/abort COMP-123` | agentic-os | Kill a running subagent; mark as failed; release resources |
-| `/consolidate` | agentic-os | Subagent walks draft + curated + deep, promotes/archives, returns short summary |
-| `/review-stale-learnings` | agentic-os | Subagent surfaces curated rules with `last_validated > stale_threshold` |
+| `/aos-install` | any | First-run: scaffold `~/.claude/agentic-os/` from templates, pre-grant Write permission |
+| `/aos-identity` | any | Mode auto-detected. **Build mode** (no identity.md present): runs the 15-question interview (see Appendix D), writes `identity.md`. **Refine mode** (identity.md present): reads current file + claude-mem observations + recent learnings, forms gap hypotheses, asks 5–8 targeted questions, proposes a diff for approval. Runs in a subagent. |
+| `/aos-load-context` | any | Read identity, learnings, and (if cwd matches) client brand + workflows into current conversation |
+| `/aos-tickets` | agentic-os | List Jira tickets assigned to user, grouped by project, with in-flight markers; then present the list via `AskUserQuestion` so each ticket is a clickable option to start or queue (no typing IDs). Re-run for a fresh snapshot — live updates are the phase-2 web UI's job. |
+| `/aos-queue COMP-123` | any | Validate ticket exists, append to `state/queue.json` |
+| `/aos-start-ticket COMP-123` | agentic-os | Full dispatch (see §5.3) |
+| `/aos-status` | any | Show in-flight workers + recent completions + queue |
+| `/aos-intervene COMP-123 <message>` | agentic-os | `SendMessage` to a running subagent with new guidance |
+| `/aos-park COMP-123` | agentic-os | Gracefully exit a SUBMITTED subagent; retain worktree for later resume |
+| `/aos-resume COMP-123` | agentic-os | Re-spawn a subagent against a previously-parked worktree |
+| `/aos-abort COMP-123` | agentic-os | Kill a running subagent; mark as failed; release resources |
+| `/aos-consolidate` | agentic-os | Subagent walks draft + curated + deep, promotes/archives, returns short summary |
+| `/aos-review-stale-learnings` | agentic-os | Subagent surfaces curated rules with `last_validated > stale_threshold` |
 
-`/tickets`, `/queue`, and `/status` use the Atlassian MCP server directly (the same one `jira-ticket` uses internally). They do not invoke the `jira-ticket` plugin as a tool. Subagents dispatched by `/start-ticket` may invoke `jira-ticket` for the full ticket workflow.
+`/aos-tickets`, `/aos-queue`, and `/aos-status` use the Atlassian MCP server directly (the same one `jira-ticket` uses internally). They do not invoke the `jira-ticket` plugin as a tool. Subagents dispatched by `/aos-start-ticket` may invoke `jira-ticket` for the full ticket workflow.
 
 ### 5.2 Parent-thin / subagent-heavy principle
 
@@ -193,7 +194,7 @@ The parent never reads anything large or repeated per-dispatch (identity, brand,
 
 The subagent does:
 
-- `/load-context` on first turn (or auto via session-start hook)
+- `/aos-load-context` on first turn (or auto via session-start hook)
 - Atlassian MCP fetch of full ticket body
 - All implementation work
 - Test execution
@@ -201,7 +202,7 @@ The subagent does:
 
 This keeps parent context budget low across many dispatches in one session.
 
-### 5.3 `/start-ticket COMP-123` dispatch flow
+### 5.3 `/aos-start-ticket COMP-123` dispatch flow
 
 ```
 [1] LOOKUP    Parent reads clients/*/repos.md; matches COMP-123's project prefix to a repo path.
@@ -230,7 +231,7 @@ This keeps parent context budget low across many dispatches in one session.
                 working_directory: <worktree>,
                 run_in_background: true,
                 prompt: "Read ~/.claude/agentic-os/tasks/COMP-123/mission.md and execute it.
-                         Begin with /load-context. End by writing report.md and entering SUBMITTED."
+                         Begin with /aos-load-context. End by writing report.md and entering SUBMITTED."
               })
               Capture agent_id; update in-flight.json.
 
@@ -246,7 +247,7 @@ This keeps parent context budget low across many dispatches in one session.
               Result recorded in state/in-flight.json.
               No subagent spawn; sub-second to a few minutes depending on suite.
 
-[11] PRESENT  Parent surfaces to /status (and phase-2 web UI later):
+[11] PRESENT  Parent surfaces to /aos-status (and phase-2 web UI later):
               "COMP-123 ready for review at http://localhost:<port>"
 
 [12] APPROVE  Human reviews at localhost:<port>, reads notes/report.
@@ -283,9 +284,9 @@ See **Appendix B**.
 
 **Level 1 — `AskUserQuestion` from the subagent.** Cleanest UX. Subagent has the tool in its allowlist. When stuck, calls `AskUserQuestion` with 2–4 concrete options. Question routes to the user's Claude Code UI. User answers. Response flows back to subagent. No kill, no resume. Same mechanism `jira-ticket` already uses for ticket clarifications. Inherited transparently when invoked from subagent.
 
-**Level 2 — `SendMessage` from the parent to a running subagent.** Parent uses `SendMessage` against the subagent's agent_id (captured at dispatch time) to inject new guidance. Subagent receives on next turn and incorporates. Triggered by `/intervene COMP-123 <message>`.
+**Level 2 — `SendMessage` from the parent to a running subagent.** Parent uses `SendMessage` against the subagent's agent_id (captured at dispatch time) to inject new guidance. Subagent receives on next turn and incorporates. Triggered by `/aos-intervene COMP-123 <message>`.
 
-**Level 3 — Help-request file + kill/resume (fallback).** If Levels 1 and 2 fail (e.g., subagent has gone into a tool-use loop and isn't responsive), subagent eventually writes `help-request.md` and exits `needs_help`. Parent surfaces; user provides input via `/resume COMP-123 <answer>`; parent appends to mission.md and re-dispatches against the existing worktree.
+**Level 3 — Help-request file + kill/aos-resume (fallback).** If Levels 1 and 2 fail (e.g., subagent has gone into a tool-use loop and isn't responsive), subagent eventually writes `help-request.md` and exits `needs_help`. Parent surfaces; user provides input via `/aos-resume COMP-123 <answer>`; parent appends to mission.md and re-dispatches against the existing worktree.
 
 ### 6.3 Watchdog
 
@@ -333,7 +334,7 @@ If a SUBMITTED subagent receives no decision after `config.concurrency.park_time
 - Subagent gracefully exits: stops dev server, releases port, terminates
 - Worktree retained, notes.md/report.md preserved
 - State recorded as `status: parked`
-- `/resume COMP-123` later re-spawns a subagent against the existing worktree to either revise or ship
+- `/aos-resume COMP-123` later re-spawns a subagent against the existing worktree to either revise or ship
 
 ### 7.4 Test layers
 
@@ -364,7 +365,7 @@ Frontend-only work does not acquire the lock and runs freely in parallel up to t
 
 ### 7.6 Browser tool preference
 
-Subagents inherit the user's global rule from `~/.claude/CLAUDE.md` via `/load-context`:
+Subagents inherit the user's global rule from `~/.claude/CLAUDE.md` via `/aos-load-context`:
 
 1. Prefer `mcp__chrome-devtools__*` (real CDP emulation; required for media queries).
 2. Fall back to `mcp__claude-in-chrome__*` if unavailable.
@@ -372,7 +373,7 @@ Subagents inherit the user's global rule from `~/.claude/CLAUDE.md` via `/load-c
 
 ## 8. Configuration
 
-Single file at `~/.claude/agentic-os/config.json`, scaffolded by `/install-agentic-os` from a template, never overwritten by plugin updates.
+Single file at `~/.claude/agentic-os/config.json`, scaffolded by `/aos-install` from a template, never overwritten by plugin updates.
 
 ```json
 {
@@ -401,7 +402,7 @@ Single file at `~/.claude/agentic-os/config.json`, scaffolded by `/install-agent
 }
 ```
 
-When `/start-ticket` is invoked and `in_flight.length >= max_concurrent_tickets`:
+When `/aos-start-ticket` is invoked and `in_flight.length >= max_concurrent_tickets`:
 - Don't dispatch
 - Auto-enqueue with priority preserved
 - Print confirmation, stop
@@ -416,7 +417,7 @@ When a subagent reaches TERMINATED, parent dequeues the highest-priority queued 
 ALWAYS-LOADED (every session)
   identity.md, learnings.md (curated index, capped)
         ▲
-        │  /consolidate promotes drafts (3+ occurrences across projects)
+        │  /aos-consolidate promotes drafts (3+ occurrences across projects)
         │
 ON-DEMAND (loaded when referenced via [[wikilinks]])
   learnings/<topic>.md, clients/<x>/*.md, project memory
@@ -427,7 +428,7 @@ RAW (append-only, never auto-loaded)
   learnings.draft.md, claude-mem observations, task scratch
 ```
 
-### 9.2 `/consolidate` workflow
+### 9.2 `/aos-consolidate` workflow
 
 Runs in a subagent so the parent never sees the full draft + curated content.
 
@@ -452,7 +453,7 @@ OUTPUT
   Short summary report to parent
 ```
 
-### 9.3 `/review-stale-learnings` workflow
+### 9.3 `/aos-review-stale-learnings` workflow
 
 Subagent reads `learnings.md` frontmatter (`last_validated`, `confidence`). For entries beyond `stale_review_days`:
 
@@ -472,7 +473,7 @@ sources: [COMP-100, COMP-103, HAB-22]
 
 ### 9.4 Three rules that prevent context rot
 
-1. Always-loaded files have hard caps. Enforced by `/consolidate`.
+1. Always-loaded files have hard caps. Enforced by `/aos-consolidate`.
 2. Deep content is opt-in. Never preloaded; followed by wikilink reference.
 3. Runtime state is not memory. `state/*.json` is mutated by parent only and never read as "knowledge."
 
@@ -483,10 +484,10 @@ These exist as design assumptions. Each must be empirically confirmed before rel
 | # | Assumption | Test | Fallback if false |
 |---|---|---|---|
 | V1 | Marketplace `source` field supports `{ "source": "github", "repo": "..." }` for plugins in a different repo | Add a tiny no-op plugin entry pointing at any external repo; verify install works | Use a separate marketplace (Option C from design discussion); preserves repo split |
-| V2 | A subagent dispatched via `Agent` tool with `run_in_background: true` produces an agent_id that `SendMessage` can target while the subagent is still running | Spawn a background agent that loops every 30s reading `tasks/<id>/control.json`; SendMessage it; confirm it receives and acts | Demote intervention to Level 3 only (help-request file + kill/resume); document UX impact in v1 |
+| V2 | A subagent dispatched via `Agent` tool with `run_in_background: true` produces an agent_id that `SendMessage` can target while the subagent is still running | Spawn a background agent that loops every 30s reading `tasks/<id>/control.json`; SendMessage it; confirm it receives and acts | Demote intervention to Level 3 only (help-request file + kill/aos-resume); document UX impact in v1 |
 | V3 | A subagent calling `AskUserQuestion` routes the question to the parent's UI when the parent is in an interactive session | Spawn a background subagent that immediately calls AskUserQuestion; observe parent UI. Also test two concurrent background subagents both calling AskUserQuestion within seconds — confirm whether CC queues them, shows both, or drops one | Subagents emit help-request.md only; no live AskUserQuestion from subagents |
-| V4 | Subagents can Read/Write to `~/.claude/agentic-os/` under default Claude Code permissions (or the install step's pre-granted Write rule covers it) | Spawn subagent that writes to `~/.claude/agentic-os/tasks/test/note.md`; confirm | `/install-agentic-os` adds explicit Write/Edit rules to settings.local.json scoped to `~/.claude/agentic-os/**` |
-| V5 | Claude Code plugins can ship a SessionStart hook that fires on every session in any directory | Add a session-start.ps1 that writes a timestamp to a known file; reload plugins; open CC in three different directories; verify | Provide `/load-context` as the manual entry point; document the requirement to run it after starting CC in client repos |
+| V4 | Subagents can Read/Write to `~/.claude/agentic-os/` under default Claude Code permissions (or the install step's pre-granted Write rule covers it) | Spawn subagent that writes to `~/.claude/agentic-os/tasks/test/note.md`; confirm | `/aos-install` adds explicit Write/Edit rules to settings.local.json scoped to `~/.claude/agentic-os/**` |
+| V5 | Claude Code plugins can ship a SessionStart hook that fires on every session in any directory | Add a session-start.ps1 that writes a timestamp to a known file; reload plugins; open CC in three different directories; verify | Provide `/aos-load-context` as the manual entry point; document the requirement to run it after starting CC in client repos |
 
 V1, V2, V3, V4, V5 are step 0 of implementation per §11.
 
@@ -497,35 +498,46 @@ V1, V2, V3, V4, V5 are step 0 of implementation per §11.
 
 1. PLUGIN SCAFFOLD
    plugin.json manifest, directory structure, marketplace entry, install on local CC.
+   Informational sub-task: check whether CC auto-namespaces plugin commands by plugin name
+   (e.g., /agentic-os:tickets). If yes, the manual `/aos-` prefix is redundant but harmless —
+   keep it for consistent UX across CC versions. If no, the prefix is load-bearing.
    Acceptance: `/plugin install agentic-os@robert-personal` works; plugin listed in /plugin.
 
-2. /install-agentic-os
+2. /aos-install
    Skill scaffolds ~/.claude/agentic-os/ from plugin/templates/.
    Pre-grants Write/Edit permission for ~/.claude/agentic-os/**.
    Idempotent: never overwrites existing data; emits a clear "already installed" message.
-   Acceptance: fresh machine → run /install-agentic-os → personal data tree exists.
+   At the end, prompts user to run /aos-identity to populate identity.md for real.
+   Acceptance: fresh machine → run /aos-install → personal data tree exists.
 
-3. /load-context + session-start hook
+2.5. /aos-identity (build + refine modes)
+   Skill runs in subagent. Build mode: 15-question interview per Appendix D, writes identity.md.
+   Refine mode: reads existing identity.md + claude-mem observations + recent learnings,
+   asks 5-8 targeted gap questions, proposes diff for approval.
+   Acceptance: build mode produces a sensible identity.md from 15 answers;
+   refine mode picks up at least one stale or missing item from existing identity.md.
+
+3. /aos-load-context + session-start hook
    Hook reads identity + learnings + (if cwd matches) client brand + workflows.
-   /load-context is the manual equivalent.
+   /aos-load-context is the manual equivalent.
    Acceptance: opening CC in a Comprend repo loads Comprend brand into context.
 
-4. STATE FILES + /tickets + /queue + /status
+4. STATE FILES + /aos-tickets + /aos-queue + /aos-status
    Read-only orchestrator surface. No subagent dispatch yet.
-   Acceptance: /tickets shows my assigned Jira issues grouped by project.
+   Acceptance: /aos-tickets shows my assigned Jira issues grouped by project.
 
-5. /start-ticket FULL LIFECYCLE
+5. /aos-start-ticket FULL LIFECYCLE
    Dispatch, port lock, worktree, mission, run_in_background Agent, SUBMITTED wait,
    trust-check, approval via SendMessage, ship.
    Acceptance: a real ticket completes end-to-end through approval and merges.
 
-6. /intervene + /park + /resume + /abort
+6. /aos-intervene + /aos-park + /aos-resume + /aos-abort
    Lifecycle controls layered on step 5.
    Acceptance: a SUBMITTED ticket can be parked and resumed across CC restarts.
 
-7. /consolidate + /review-stale-learnings
+7. /aos-consolidate + /aos-review-stale-learnings
    Self-improvement loop. Both run in subagents.
-   Acceptance: after a few mock observations in draft, /consolidate produces a sensible promotion.
+   Acceptance: after a few mock observations in draft, /aos-consolidate produces a sensible promotion.
 
 8. POLISH
    Real-data scaffolding for Comprend brand + repos.md, sensible defaults in config.json,
@@ -572,7 +584,7 @@ Scratch:   ~/.claude/agentic-os/tasks/<TICKET-ID>/
            - DO NOT write to ~/.claude/agentic-os/state/*.json
 
 Setup (in order on first turn):
-  1. /load-context        (loads identity + client brand + workflows + learnings)
+  1. /aos-load-context        (loads identity + client brand + workflows + learnings)
   2. Fetch <TICKET-ID> via Atlassian MCP for full body + acceptance criteria.
   3. Plan; communicate plan in notes.md before implementing.
   4. Implement.
@@ -665,3 +677,73 @@ state/locks.json
   "qa_backend": null
 }
 ```
+
+## Appendix D — /aos-identity 15-question interview contract
+
+The build mode asks exactly these 15 questions in order, using `AskUserQuestion` (with multi-choice options where shown; "Other" available on every question for free text). The subagent synthesizes answers into `identity.md` sections matching the six categories.
+
+| # | Category | Question | Format | Maps to identity.md section |
+|---|---|---|---|---|
+| 1 | Role & context | What's your role / primary work? | Multi-choice + Other (web dev for clients / product engineering / SRE / both / Other) | `## Role` |
+| 2 | Role & context | Are you primarily building, debugging, reviewing, or some mix? | Multi-choice | `## Role` |
+| 3 | Communication | Response length preference? | Multi-choice (terse / balanced / detailed) | `## Communication` |
+| 4 | Communication | Should Claude explain what it's about to do, or just do it? | Multi-choice (explain first / just do / case-by-case) | `## Communication` |
+| 5 | Communication | Do you want summaries at end of work, or skip them since you can read the diff? | Multi-choice (always / only when substantive / never) | `## Communication` |
+| 6 | Code standards | Comment policy? | Multi-choice (none unless non-obvious / explain intent / heavy docs) | `## Code standards` |
+| 7 | Code standards | Testing philosophy? | Multi-choice (TDD / tests-after / case-by-case / skip for prototypes) | `## Code standards` |
+| 8 | Code standards | Refactor tolerance when fixing a bug — also clean up nearby smells? | Multi-choice (aggressive / minimal / case-by-case) | `## Code standards` |
+| 9 | Autonomy | When Claude is uncertain about a design choice — ask first, pick a default and proceed, or pick and surface? | Multi-choice | `## Autonomy` |
+| 10 | Autonomy | Destructive operations (force-push, delete branch, drop table) — confirmation policy? | Multi-choice (always confirm / confirm only for shared state / autonomous) | `## Autonomy` |
+| 11 | Autonomy | Multi-step tasks — plan first, start immediately, or case-by-case? | Multi-choice | `## Autonomy` |
+| 12 | Hard rules | Things Claude should NEVER do (top 1–3)? | Free text | `## Never` |
+| 13 | Hard rules | Things Claude should ALWAYS do (top 1–3)? | Free text | `## Always` |
+| 14 | Hard rules | Pet peeves about generic AI output you want suppressed? | Free text | `## Pet peeves` |
+| 15 | Domain assumed | What expertise / stack should Claude assume you have? | Free text | `## Domain` |
+
+### Output template — identity.md
+
+The wizard writes a file structured as:
+
+```markdown
+# Identity — Robert Ghafoor
+
+## Role
+You are a <role from Q1>, primarily <activity mix from Q2>.
+
+## Communication
+- Response length: <Q3>
+- Pre-action explanations: <Q4>
+- End-of-turn summaries: <Q5>
+
+## Code standards
+- Comments: <Q6>
+- Tests: <Q7>
+- Refactor tolerance: <Q8>
+
+## Autonomy
+- When uncertain: <Q9>
+- Destructive operations: <Q10>
+- Multi-step tasks: <Q11>
+
+## Never
+<Q12, formatted as bullets>
+
+## Always
+<Q13, formatted as bullets>
+
+## Pet peeves
+<Q14, formatted as prose or bullets — the wizard picks based on input>
+
+## Domain
+<Q15, formatted as prose>
+```
+
+### Refine mode
+
+The subagent reads the existing identity.md plus a sample of recent claude-mem observations and learnings.draft.md entries, then asks 5–8 questions targeting only:
+
+- Sections where observed behavior contradicts the file
+- Sections that are vague enough to allow misinterpretation
+- New dimensions that have emerged since the last refresh (e.g., a new tool you started using, a new client you onboarded)
+
+Output is presented as a diff for explicit approval before write.
