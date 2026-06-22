@@ -21,6 +21,7 @@ import { SkillRuntime } from "./skills/skill-runtime.js";
 import type { SkillServices } from "./skills/native-registry.js";
 import { VaultAdapter } from "./memory/vault-adapter.js";
 import { VaultRecorder } from "./memory/vault-recorder.js";
+import { extractSpokenCore } from "./memory/document-builder.js";
 import { Speaker, SpeechBridge } from "./voice/speaker.js";
 import { createTtsProvider } from "./voice/tts-provider.js";
 import { createMailProvider, type MailProvider } from "./mail/mail-provider.js";
@@ -66,6 +67,16 @@ async function main(): Promise<void> {
   const router = new Router({ runtime });
   const speaker = new Speaker(bus, config.voice.mode, createTtsProvider());
   new SpeechBridge(bus, speaker);
+
+  // Auto-announce: in voice mode, read a finished task's spoken core (its TL;DR
+  // blockquote) aloud — the Jarvis-style "here's what I just did". Gated on
+  // voice mode so text mode stays quiet; config is re-read live via applyConfig.
+  bus.subscribe((e) => {
+    if (e.type !== "operation.completed" || !e.result || config.voice.mode !== "voice") return;
+    const doc = vault.readByPath(e.result.path);
+    const core = doc ? extractSpokenCore(doc.body) : "";
+    void speaker.say(core || `${e.result.title} ready.`);
+  });
   const dispatcher = new Dispatcher(router, loader, bus, runtime, vault, new SkillRuntime(bus, loader, buildServices()));
 
   // Live apply: reload config from the store/env and rebuild affected pieces.
