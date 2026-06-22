@@ -9,7 +9,8 @@
     "start": "tsx src/server.ts",
     "route-demo": "tsx scripts/route-demo.ts",
     "runtime-demo": "tsx scripts/runtime-demo.ts",
-    "vault-demo": "tsx scripts/vault-demo.ts"
+    "vault-demo": "tsx scripts/vault-demo.ts",
+    "deck-demo": "tsx scripts/deck-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",

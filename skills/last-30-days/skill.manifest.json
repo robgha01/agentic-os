@@ -3,6 +3,15 @@
   "name": "Last 30 Days Deep Research",
   "description": "Scrapes high-signal platforms (Reddit, X, YouTube transcripts, Hacker News, repos) and compiles a deep contextual brief on a topic for the trailing 30 days.",
   "triggers": ["last-30-days"],
+  "surfaces": ["deck", "nl"],
+  "presentation": {
+    "label": "Deep Research",
+    "icon": "telescope",
+    "group": "Knowledge",
+    "inputs": [
+      { "name": "topic", "type": "string", "label": "Topic", "required": true }
+    ]
+  },
   "modelPolicy": {
     "execTier": "heavy",
     "privacy": "cloud-ok"

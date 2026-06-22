@@ -7,8 +7,8 @@
  * the gateway's dispatch layer hands to the skill runtime.
  */
 
-/** Which path produced an intent. */
-export type RouteSource = "regex" | "semantic";
+/** Which path produced an intent. `direct` = a command-deck button / invoke (no routing). */
+export type RouteSource = "regex" | "semantic" | "direct";
 
 /** A single parameter an action can accept, surfaced to the semantic router. */
 export interface ActionParameter {
@@ -36,7 +36,7 @@ export interface RoutedIntent {
   actionId: string;
   /** Which path resolved it. */
   source: RouteSource;
-  /** 0..1. Regex matches are reported as 1; semantic matches carry model confidence. */
+  /** 0..1. Regex/direct matches are reported as 1; semantic matches carry model confidence. */
   confidence: number;
   /** Extracted/structured parameters keyed by name. */
   parameters: Record<string, unknown>;

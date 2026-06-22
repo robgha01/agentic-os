@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   const router = new Router({ runtime });
   const dispatcher = new Dispatcher(router, loader, bus, runtime);
 
-  const server = new GatewayServer(bus, dispatcher, config.ports.gateway);
+  const server = new GatewayServer(bus, dispatcher, loader, config.ports.gateway);
   await server.start();
 
   console.log(`[gateway] listening on http://localhost:${server.port}  (ws + /health)`);

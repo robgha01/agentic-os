@@ -7,6 +7,7 @@ import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientCommand, OsEvent } from "@aos/shared";
 import type { Dispatcher } from "../dispatch/dispatcher.js";
+import type { SkillLoader } from "../skills/skill-loader.js";
 import type { EventBus } from "./event-bus.js";
 
 export class GatewayServer {
@@ -18,12 +19,19 @@ export class GatewayServer {
   constructor(
     private readonly bus: EventBus,
     private readonly dispatcher: Dispatcher,
+    private readonly loader: SkillLoader,
     private readonly requestedPort: number,
   ) {
     this.http = createServer((req, res) => {
       if (req.url === "/health") {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ status: "ok", clients: this.wss.clients.size }));
+        return;
+      }
+      // The HUD fetches this on load to build the command deck.
+      if (req.url === "/skills") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ skills: this.loader.deckCards() }));
         return;
       }
       res.writeHead(404);
@@ -77,18 +85,26 @@ export class GatewayServer {
         return;
       case "route":
         // Events flow back over the broadcast subscription; don't await here.
-        void this.dispatcher.dispatch(cmd.input).catch((err) => {
-          this.bus.emit({
-            type: "notification",
-            at: new Date().toISOString(),
-            level: "error",
-            message: `dispatch failed: ${(err as Error).message}`,
-          });
-        });
+        void this.dispatcher.dispatch(cmd.input).catch((err) => this.emitDispatchError(err));
+        return;
+      case "invoke":
+        // Command-deck button: deterministic, deck-gated invoke.
+        void this.dispatcher
+          .invoke(cmd.skillId, cmd.params ?? {}, { requireDeck: true })
+          .catch((err) => this.emitDispatchError(err));
         return;
       default:
         this.send(ws, { type: "notification", at: new Date().toISOString(), level: "error", message: "unknown command" });
     }
+  }
+
+  private emitDispatchError(err: unknown): void {
+    this.bus.emit({
+      type: "notification",
+      at: new Date().toISOString(),
+      level: "error",
+      message: `dispatch failed: ${(err as Error).message}`,
+    });
   }
 
   private broadcast(event: OsEvent): void {

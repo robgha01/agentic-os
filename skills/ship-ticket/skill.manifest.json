@@ -3,6 +3,15 @@
   "name": "Ship Ticket (Shape A pipeline)",
   "description": "The legacy Shape A Jira pipeline reframed as a skill: branch, implement, submit, and ship a referenced ticket via a headless Claude Code session.",
   "triggers": ["ship-ticket"],
+  "surfaces": ["deck", "nl"],
+  "presentation": {
+    "label": "Ship Ticket",
+    "icon": "rocket",
+    "group": "Workflows",
+    "inputs": [
+      { "name": "ticketId", "type": "string", "label": "Ticket ID", "description": "e.g. SCA-431", "required": true }
+    ]
+  },
   "modelPolicy": {
     "execTier": "heavy",
     "privacy": "cloud-ok",

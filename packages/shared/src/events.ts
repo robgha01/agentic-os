@@ -39,5 +39,8 @@ export type OsEventType = OsEvent["type"];
 
 /** Commands a HUD/voice client can send to the gateway. */
 export type ClientCommand =
+  /** Free text (typed/spoken) -> routed through the intent router. */
   | { type: "route"; input: string }
+  /** Deterministic command-deck button -> invoke a skill by id, no routing. */
+  | { type: "invoke"; skillId: string; params?: Record<string, unknown> }
   | { type: "ping" };

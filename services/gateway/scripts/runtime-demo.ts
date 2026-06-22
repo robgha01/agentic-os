@@ -40,6 +40,7 @@ async function partA(): Promise<void> {
     name: "Demo Echo",
     description: "Prints a line to prove process streaming.",
     triggers: ["demo-echo"],
+    surfaces: [],
     modelPolicy: { execTier: "none", privacy: "cloud-ok" },
     execution: {
       kind: "process",
@@ -83,7 +84,7 @@ async function partC(): Promise<void> {
   const loader = new SkillLoader();
   loader.load();
   const dispatcher = new Dispatcher(new Router({ runtime: RUNTIME }), loader, bus, RUNTIME);
-  const server = new GatewayServer(bus, dispatcher, 0); // ephemeral port
+  const server = new GatewayServer(bus, dispatcher, loader, 0); // ephemeral port
   await server.start();
 
   const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);

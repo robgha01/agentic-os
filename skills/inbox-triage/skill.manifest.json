@@ -3,6 +3,13 @@
   "name": "Inbox Triage",
   "description": "Classifies, summarizes, and surfaces action items from unread email. Runs locally for privacy.",
   "triggers": ["inbox-triage"],
+  "surfaces": ["deck", "nl"],
+  "presentation": {
+    "label": "Triage Inbox",
+    "icon": "inbox",
+    "group": "Workflows",
+    "inputs": []
+  },
   "modelPolicy": {
     "execTier": "light",
     "privacy": "local-only"

@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseSkillManifest, type SkillManifest } from "@aos/shared";
+import { parseSkillManifest, type SkillCard, type SkillManifest } from "@aos/shared";
 
 /** Default skills dir: <repo-root>/skills, resolved relative to this module. */
 function defaultSkillsDir(): string {
@@ -61,6 +61,11 @@ export class SkillLoader {
     return this.byTrigger.get(actionId);
   }
 
+  /** A skill by its id, if loaded. */
+  get(id: string): SkillManifest | undefined {
+    return this.byId.get(id);
+  }
+
   byIdOrThrow(id: string): SkillManifest {
     const m = this.byId.get(id);
     if (!m) throw new Error(`unknown skill id "${id}"`);
@@ -69,5 +74,18 @@ export class SkillLoader {
 
   all(): SkillManifest[] {
     return [...this.byId.values()];
+  }
+
+  /** Command-deck cards: skills surfaced as "deck" with a presentation. */
+  deckCards(): SkillCard[] {
+    return this.all()
+      .filter((s) => s.surfaces.includes("deck") && s.presentation)
+      .map((s) => ({
+        skillId: s.id,
+        label: s.presentation!.label,
+        icon: s.presentation!.icon,
+        group: s.presentation!.group,
+        inputs: s.presentation!.inputs,
+      }));
   }
 }

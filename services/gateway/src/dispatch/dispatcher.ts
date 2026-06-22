@@ -11,7 +11,12 @@
  * exists) resolve to a notification rather than an error.
  */
 import { randomUUID } from "node:crypto";
-import type { ModelRuntimeContext, ModelSelection } from "@aos/shared";
+import type {
+  ModelRuntimeContext,
+  ModelSelection,
+  RoutedIntent,
+  SkillManifest,
+} from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import { EventBus, now } from "../bus/event-bus.js";
 import { selectModel } from "../models/model-selector.js";
@@ -32,7 +37,10 @@ export class Dispatcher {
     this.runtimeExec = runtimeExec ?? new SkillRuntime(bus);
   }
 
-  /** Resolve and run an utterance end-to-end. Returns the operation id. */
+  /**
+   * Natural-language path: resolve an utterance through the router, then run
+   * the bound skill. Returns the operation id.
+   */
   async dispatch(input: string): Promise<string> {
     const intent = await this.router.route(input);
     this.bus.emit({ type: "routing.resolved", at: now(), intent });
@@ -42,11 +50,7 @@ export class Dispatcher {
 
     // No skill bound — acknowledge and stop (not an error).
     if (!skill) {
-      this.bus.emit({
-        type: "operation.started",
-        at: now(),
-        op: { opId, actionId: intent.actionId, skillId: null, selection: null },
-      });
+      this.startOp(opId, intent.actionId, null, null);
       this.bus.emit({
         type: "notification",
         at: now(),
@@ -60,7 +64,72 @@ export class Dispatcher {
       return opId;
     }
 
-    // Run the model-selection cascade.
+    await this.runSkill(skill, intent, opId);
+    return opId;
+  }
+
+  /**
+   * Deterministic path: invoke a skill directly by id (command-deck buttons,
+   * voice shortcuts, or composition by other skills). Bypasses the router.
+   *
+   * `requireDeck` gates user-facing invokes: a skill must be surfaced as "deck"
+   * and have its required presentation inputs satisfied. Internal composition
+   * calls leave it false.
+   */
+  async invoke(
+    skillId: string,
+    params: Record<string, unknown> = {},
+    opts: { requireDeck?: boolean } = {},
+  ): Promise<string> {
+    const opId = randomUUID();
+    const skill = this.loader.get(skillId);
+
+    if (!skill) {
+      this.startOp(opId, skillId, null, null);
+      this.bus.emit({ type: "operation.failed", at: now(), opId, error: `unknown skill "${skillId}"` });
+      return opId;
+    }
+
+    if (opts.requireDeck) {
+      if (!skill.surfaces.includes("deck")) {
+        this.startOp(opId, skill.id, skill.id, null);
+        this.bus.emit({
+          type: "operation.failed",
+          at: now(),
+          opId,
+          error: `skill "${skillId}" is not invokable from the command deck`,
+        });
+        return opId;
+      }
+      const missing = (skill.presentation?.inputs ?? [])
+        .filter((i) => i.required && (params[i.name] === undefined || params[i.name] === ""))
+        .map((i) => i.name);
+      if (missing.length > 0) {
+        this.startOp(opId, skill.id, skill.id, null);
+        this.bus.emit({
+          type: "operation.failed",
+          at: now(),
+          opId,
+          error: `missing required input(s): ${missing.join(", ")}`,
+        });
+        return opId;
+      }
+    }
+
+    const intent: RoutedIntent = {
+      actionId: skill.triggers[0] ?? skill.id,
+      source: "direct",
+      confidence: 1,
+      parameters: params,
+      rawInput: `invoke:${skillId}`,
+    };
+    this.bus.emit({ type: "routing.resolved", at: now(), intent });
+    await this.runSkill(skill, intent, opId);
+    return opId;
+  }
+
+  /** Shared tail: model-selection cascade -> runtime, with event emission. */
+  private async runSkill(skill: SkillManifest, intent: RoutedIntent, opId: string): Promise<void> {
     let selection: ModelSelection | null;
     try {
       selection = selectModel(skill.modelPolicy, this.runtime, {
@@ -70,23 +139,21 @@ export class Dispatcher {
         },
       });
     } catch (err) {
-      this.bus.emit({
-        type: "operation.started",
-        at: now(),
-        op: { opId, actionId: intent.actionId, skillId: skill.id, selection: null },
-      });
+      this.startOp(opId, intent.actionId, skill.id, null);
       this.bus.emit({ type: "operation.failed", at: now(), opId, error: (err as Error).message });
-      return opId;
+      return;
     }
 
-    this.bus.emit({
-      type: "operation.started",
-      at: now(),
-      op: { opId, actionId: intent.actionId, skillId: skill.id, selection },
-    });
-
-    // Fire-and-stream. Callers that need completion can await dispatch().
+    this.startOp(opId, intent.actionId, skill.id, selection);
     await this.runtimeExec.execute(skill, intent, selection, opId);
-    return opId;
+  }
+
+  private startOp(
+    opId: string,
+    actionId: string,
+    skillId: string | null,
+    selection: ModelSelection | null,
+  ): void {
+    this.bus.emit({ type: "operation.started", at: now(), op: { opId, actionId, skillId, selection } });
   }
 }
