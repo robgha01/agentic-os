@@ -1,0 +1,15 @@
+{
+  "id": "compile-research",
+  "name": "Compile Research",
+  "description": "Sub-skill: compiles gathered sources from the shared composite context into a contract-compliant research record in the vault.",
+  "triggers": ["compile-research"],
+  "surfaces": [],
+  "modelPolicy": {
+    "execTier": "none",
+    "privacy": "cloud-ok"
+  },
+  "execution": {
+    "kind": "native",
+    "handler": "compileResearch"
+  }
+}

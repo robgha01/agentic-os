@@ -13,6 +13,7 @@ import { Dispatcher } from "./dispatch/dispatcher.js";
 import { Router } from "./routing/router.js";
 import { detectRuntime } from "./runtime.js";
 import { SkillLoader } from "./skills/skill-loader.js";
+import { SkillRuntime } from "./skills/skill-runtime.js";
 import { VaultAdapter } from "./memory/vault-adapter.js";
 import { VaultRecorder } from "./memory/vault-recorder.js";
 
@@ -30,7 +31,12 @@ async function main(): Promise<void> {
   const skillCount = loader.load();
 
   const router = new Router({ runtime });
-  const dispatcher = new Dispatcher(router, loader, bus, runtime);
+  // Share one vault + skill runtime so skills and the recorder write the same tree.
+  const skillRuntime = new SkillRuntime(bus, loader, {
+    vault,
+    nowIso: () => new Date().toISOString(),
+  });
+  const dispatcher = new Dispatcher(router, loader, bus, runtime, skillRuntime);
 
   const server = new GatewayServer(bus, dispatcher, loader, config.ports.gateway);
   await server.start();

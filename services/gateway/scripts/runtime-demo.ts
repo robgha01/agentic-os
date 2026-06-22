@@ -10,12 +10,16 @@
  */
 import { WebSocket } from "ws";
 import type { ModelRuntimeContext, OsEvent, SkillManifest } from "@aos/shared";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { EventBus } from "../src/bus/event-bus.js";
 import { GatewayServer } from "../src/bus/ws-server.js";
 import { Dispatcher } from "../src/dispatch/dispatcher.js";
 import { Router } from "../src/routing/router.js";
 import { SkillLoader } from "../src/skills/skill-loader.js";
 import { SkillRuntime } from "../src/skills/skill-runtime.js";
+import { VaultAdapter } from "../src/memory/vault-adapter.js";
 
 const RUNTIME: ModelRuntimeContext = {
   networkUp: true,
@@ -33,7 +37,10 @@ async function partA(): Promise<void> {
   console.log("\n--- A) SkillRuntime executes a process skill ---");
   const bus = new EventBus();
   const events = collect(bus);
-  const runtime = new SkillRuntime(bus);
+  const runtime = new SkillRuntime(bus, new SkillLoader(), {
+    vault: new VaultAdapter(mkdtempSync(join(tmpdir(), "aos-rt-"))),
+    nowIso: () => "2026-06-22T10:00:00Z",
+  });
 
   const echoSkill: SkillManifest = {
     id: "demo-echo",

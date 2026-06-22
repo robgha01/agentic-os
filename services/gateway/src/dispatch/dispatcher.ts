@@ -23,6 +23,7 @@ import { selectModel } from "../models/model-selector.js";
 import type { Router } from "../routing/router.js";
 import type { SkillLoader } from "../skills/skill-loader.js";
 import { SkillRuntime } from "../skills/skill-runtime.js";
+import { VaultAdapter } from "../memory/vault-adapter.js";
 
 export class Dispatcher {
   private readonly runtimeExec: SkillRuntime;
@@ -34,7 +35,12 @@ export class Dispatcher {
     private readonly runtime: ModelRuntimeContext,
     runtimeExec?: SkillRuntime,
   ) {
-    this.runtimeExec = runtimeExec ?? new SkillRuntime(bus);
+    this.runtimeExec =
+      runtimeExec ??
+      new SkillRuntime(bus, loader, {
+        vault: new VaultAdapter(),
+        nowIso: () => new Date().toISOString(),
+      });
   }
 
   /**

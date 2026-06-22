@@ -2,16 +2,23 @@
  * Skill runtime — executes a dispatched skill and streams its output onto the
  * event bus as operation.output / .completed / .failed events.
  *
- * Three execution kinds:
+ * Execution kinds:
  *  - claude-headless : spawn a hidden `claude -p` session (model from selection)
  *  - process         : spawn an arbitrary local command (scrapers, pipelines)
- *  - native          : invoke an in-gateway TypeScript handler
+ *  - native          : invoke an in-gateway TypeScript handler (gets services +
+ *                      a shared context bag)
+ *  - composite       : run an ordered list of sub-skills, threading one shared
+ *                      context so steps pass data between each other
+ *
+ * The op lifecycle (completed/failed) is emitted once, at the top level — sub-
+ * steps only stream output under the same opId.
  */
 import { spawn } from "node:child_process";
 import type { ModelSelection, RoutedIntent, SkillManifest } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import { EventBus, now } from "../bus/event-bus.js";
-import { NATIVE_HANDLERS } from "./native-registry.js";
+import { NATIVE_HANDLERS, type SkillServices } from "./native-registry.js";
+import type { SkillLoader } from "./skill-loader.js";
 
 /** Fill `{{param}}` placeholders from the routed intent's parameters. */
 export function renderTemplate(template: string, params: Record<string, unknown>): string {
@@ -21,65 +28,95 @@ export function renderTemplate(template: string, params: Record<string, unknown>
   });
 }
 
-export class SkillRuntime {
-  constructor(private readonly bus: EventBus) {}
+interface StepResult {
+  ok: boolean;
+  exitCode: number | null;
+  error?: string;
+}
 
-  /** Run a skill to completion, emitting events. Resolves when the op ends. */
+export class SkillRuntime {
+  constructor(
+    private readonly bus: EventBus,
+    private readonly loader: SkillLoader,
+    private readonly services: SkillServices,
+  ) {}
+
+  /** Run a skill to completion, emitting the op lifecycle once. */
   async execute(
     skill: SkillManifest,
     intent: RoutedIntent,
     selection: ModelSelection | null,
     opId: string,
   ): Promise<void> {
+    const context: Record<string, unknown> = {};
+    const result = await this.runOne(skill, intent, selection, context, opId);
+    if (result.ok) this.complete(opId, result.exitCode);
+    else this.fail(opId, result.error ?? `exit ${result.exitCode}`);
+  }
+
+  /** Execute one skill (recursively for composites). Streams output; no lifecycle. */
+  private async runOne(
+    skill: SkillManifest,
+    intent: RoutedIntent,
+    selection: ModelSelection | null,
+    context: Record<string, unknown>,
+    opId: string,
+  ): Promise<StepResult> {
     const exec = skill.execution;
 
     switch (exec.kind) {
       case "claude-headless": {
-        const model =
-          selection?.model ?? config.anthropic.heavyModel; // selection drives the model
+        const model = selection?.model ?? config.anthropic.heavyModel;
         const prompt = renderTemplate(exec.promptTemplate, intent.parameters);
-        await this.spawnStreaming(
-          opId,
-          config.claudeCode.bin,
-          ["-p", "--model", model, ...exec.args],
-          prompt,
-        );
-        return;
+        return this.spawnCollect(opId, config.claudeCode.bin, ["-p", "--model", model, ...exec.args], prompt);
       }
 
       case "process": {
         const args = exec.args.map((a) => renderTemplate(a, intent.parameters));
-        await this.spawnStreaming(opId, exec.command, args);
-        return;
+        return this.spawnCollect(opId, exec.command, args);
       }
 
       case "native": {
         const handler = NATIVE_HANDLERS[exec.handler];
         if (!handler) {
-          this.fail(opId, `no native handler registered for "${exec.handler}"`);
-          return;
+          return { ok: false, exitCode: null, error: `no native handler registered for "${exec.handler}"` };
         }
         try {
           const code = await handler({
             intent,
+            params: intent.parameters,
+            context,
+            services: this.services,
             emit: (chunk) => this.output(opId, "stdout", chunk),
           });
-          this.complete(opId, code);
+          return { ok: code === 0, exitCode: code };
         } catch (err) {
-          this.fail(opId, (err as Error).message);
+          return { ok: false, exitCode: null, error: (err as Error).message };
         }
-        return;
+      }
+
+      case "composite": {
+        for (const stepId of exec.steps) {
+          const step = this.loader.get(stepId);
+          if (!step) return { ok: false, exitCode: null, error: `composite step "${stepId}" not found` };
+          this.output(opId, "stdout", `▸ step: ${step.id}\n`);
+          const r = await this.runOne(step, intent, selection, context, opId);
+          if (!r.ok) {
+            return { ok: false, exitCode: r.exitCode, error: `step "${step.id}" failed: ${r.error ?? `exit ${r.exitCode}`}` };
+          }
+        }
+        return { ok: true, exitCode: 0 };
       }
     }
   }
 
-  /** Spawn a child process, stream stdio to the bus, emit completed/failed. */
-  private spawnStreaming(
+  /** Spawn a child, stream its stdio to the bus, resolve with a StepResult. */
+  private spawnCollect(
     opId: string,
     command: string,
     args: string[],
     stdin?: string,
-  ): Promise<void> {
+  ): Promise<StepResult> {
     return new Promise((resolve) => {
       let settled = false;
       const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"] });
@@ -90,15 +127,13 @@ export class SkillRuntime {
       child.on("error", (err) => {
         if (settled) return;
         settled = true;
-        this.fail(opId, `failed to spawn "${command}": ${err.message}`);
-        resolve();
+        resolve({ ok: false, exitCode: null, error: `failed to spawn "${command}": ${err.message}` });
       });
 
       child.on("close", (code) => {
         if (settled) return;
         settled = true;
-        this.complete(opId, code);
-        resolve();
+        resolve({ ok: code === 0, exitCode: code });
       });
 
       if (stdin !== undefined) child.stdin.write(stdin);

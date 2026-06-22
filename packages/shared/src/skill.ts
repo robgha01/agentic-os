@@ -35,6 +35,11 @@ export const SkillExecutionSchema = z.discriminatedUnion("kind", [
     kind: z.literal("native"),
     handler: z.string().min(1),
   }),
+  /** Ordered pipeline of sub-skill ids, sharing an in-memory context. */
+  z.object({
+    kind: z.literal("composite"),
+    steps: z.array(z.string().min(1)).min(1),
+  }),
 ]);
 export type SkillExecution = z.infer<typeof SkillExecutionSchema>;
 

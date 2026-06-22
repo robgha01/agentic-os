@@ -1,7 +1,7 @@
 {
   "id": "last-30-days",
   "name": "Last 30 Days Deep Research",
-  "description": "Scrapes high-signal platforms (Reddit, X, YouTube transcripts, Hacker News, repos) and compiles a deep contextual brief on a topic for the trailing 30 days.",
+  "description": "Gathers high-signal recent activity on a topic and compiles a cited research brief into the vault. Phase 3a sources Hacker News; more sources (Reddit, YouTube, X) are added as sub-skills.",
   "triggers": ["last-30-days"],
   "surfaces": ["deck", "nl"],
   "presentation": {
@@ -13,14 +13,13 @@
     ]
   },
   "modelPolicy": {
-    "execTier": "heavy",
+    "execTier": "none",
     "privacy": "cloud-ok"
   },
   "execution": {
-    "kind": "claude-headless",
-    "promptTemplate": "Run a Last-30-Days deep research brief on: {{topic}}. Scrape high-signal sources, then write a cited markdown brief.",
-    "args": ["--model", "claude-opus-4-8"]
+    "kind": "composite",
+    "steps": ["fetch-hackernews", "compile-research"]
   },
-  "vaultOutput": "research/{{topic}}.md",
+  "vaultOutput": "10-research/{{topic}}.md",
   "staleAfterMinutes": 1440
 }

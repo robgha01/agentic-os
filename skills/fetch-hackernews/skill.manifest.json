@@ -1,0 +1,15 @@
+{
+  "id": "fetch-hackernews",
+  "name": "Fetch Hacker News",
+  "description": "Sub-skill: fetches recent Hacker News stories for a topic via the public Algolia API (no key) and puts them on the shared composite context.",
+  "triggers": ["fetch-hackernews"],
+  "surfaces": [],
+  "modelPolicy": {
+    "execTier": "none",
+    "privacy": "cloud-ok"
+  },
+  "execution": {
+    "kind": "native",
+    "handler": "fetchHackerNews"
+  }
+}
