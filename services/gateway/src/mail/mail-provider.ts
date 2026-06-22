@@ -2,15 +2,22 @@
  * Mail providers — the hot-swappable inbox backend for the triage skill.
  *
  * `outlook` is implemented against Microsoft Graph (work or personal Outlook /
- * Microsoft 365), authenticated with an access token the user supplies via env.
- * The token is delegated (Mail.Read scope) — obtain it via an Azure AD app
- * (device-code/auth-code flow) or, for testing, Graph Explorer. Token refresh /
- * device-code flow is a documented follow-up; a static token works today.
+ * Microsoft 365). Tokens come from a pluggable GraphTokenProvider so NO Azure
+ * app registration is required — the default is device-code sign-in against a
+ * public Microsoft client (see graph-auth.ts), with `command` (az/mgc) and
+ * `env` (static) alternatives.
  *
- * gmail/imap are recognized but not yet implemented (they throw clearly rather
- * than pretend).
+ * gmail/imap are recognized but not yet implemented (they throw clearly).
  */
 import { config } from "../../../../config/agentic-os.config.js";
+import {
+  CommandTokenProvider,
+  DeviceCodeTokenProvider,
+  FileTokenStore,
+  StaticTokenProvider,
+  type DeviceCodePrompt,
+  type GraphTokenProvider,
+} from "./graph-auth.js";
 
 export interface MailMessage {
   id: string;
@@ -19,13 +26,11 @@ export interface MailMessage {
   receivedAt: string;
   snippet: string;
   flagged: boolean;
-  /** Deep link to open the message, when the provider exposes one. */
   webLink?: string;
 }
 
 export interface MailProvider {
   readonly id: string;
-  /** Most recent unread messages, newest first. */
   listUnread(limit: number): Promise<MailMessage[]>;
 }
 
@@ -44,11 +49,12 @@ export class OutlookGraphProvider implements MailProvider {
   readonly id = "outlook";
 
   constructor(
-    private readonly token: string,
+    private readonly tokens: GraphTokenProvider,
     private readonly baseUrl: string = "https://graph.microsoft.com/v1.0",
   ) {}
 
   async listUnread(limit: number): Promise<MailMessage[]> {
+    const token = await this.tokens.getToken();
     const url =
       `${this.baseUrl}/me/mailFolders/inbox/messages` +
       `?$filter=isRead eq false&$top=${Math.max(1, Math.min(limit, 50))}` +
@@ -56,7 +62,7 @@ export class OutlookGraphProvider implements MailProvider {
       `&$orderby=receivedDateTime desc`;
 
     const res = await fetch(url, {
-      headers: { authorization: `Bearer ${this.token}` },
+      headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {
@@ -77,27 +83,52 @@ export class OutlookGraphProvider implements MailProvider {
   }
 }
 
+export interface MailHooks {
+  /** Surface a device-code sign-in prompt to the user (HUD popup / notification). */
+  onPrompt?: (p: DeviceCodePrompt) => void;
+  onResolved?: (ok: boolean) => void;
+}
+
+/** Build the Graph token provider implied by config.mail.tokenSource. */
+function buildTokenProvider(mailConfig: typeof config.mail, env: NodeJS.ProcessEnv, hooks: MailHooks): GraphTokenProvider {
+  switch (mailConfig.tokenSource) {
+    case "env": {
+      const token = env[mailConfig.tokenEnv];
+      if (!token) throw new Error(`mail tokenSource "env" needs a token in $${mailConfig.tokenEnv}`);
+      return new StaticTokenProvider(token);
+    }
+    case "command":
+      return new CommandTokenProvider(mailConfig.tokenCommand);
+    case "device-code":
+      return new DeviceCodeTokenProvider({
+        clientId: mailConfig.clientId,
+        tenant: mailConfig.tenant,
+        scopes: mailConfig.scopes,
+        store: new FileTokenStore(mailConfig.tokenStorePath),
+        onPrompt: hooks.onPrompt ?? consolePrompt,
+        onResolved: hooks.onResolved,
+      });
+  }
+}
+
+function consolePrompt(p: DeviceCodePrompt): void {
+  console.log(`\n[mail] Outlook sign-in needed:\n  open ${p.verificationUri}\n  enter code: ${p.userCode}\n`);
+}
+
 /**
  * Build the configured mail provider, or `undefined` when mail is disabled.
- * Throws a descriptive error when a provider is selected but unusable (missing
- * token, or not yet implemented), so the skill surfaces exactly what's wrong.
+ * Throws a descriptive error when a provider is selected but unusable.
  */
 export function createMailProvider(
   mailConfig = config.mail,
   envSource: NodeJS.ProcessEnv = process.env,
+  hooks: MailHooks = {},
 ): MailProvider | undefined {
   switch (mailConfig.provider) {
     case "none":
       return undefined;
-    case "outlook": {
-      const token = envSource[mailConfig.tokenEnv];
-      if (!token) {
-        throw new Error(
-          `mail provider "outlook" needs an access token in $${mailConfig.tokenEnv}`,
-        );
-      }
-      return new OutlookGraphProvider(token, mailConfig.graphBaseUrl);
-    }
+    case "outlook":
+      return new OutlookGraphProvider(buildTokenProvider(mailConfig, envSource, hooks), mailConfig.graphBaseUrl);
     case "gmail":
     case "imap":
       throw new Error(`mail provider "${mailConfig.provider}" is not yet implemented`);

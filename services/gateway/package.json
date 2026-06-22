@@ -13,7 +13,8 @@
     "deck-demo": "tsx scripts/deck-demo.ts",
     "research-demo": "tsx scripts/research-demo.ts",
     "voice-demo": "tsx scripts/voice-demo.ts",
-    "mail-demo": "tsx scripts/mail-demo.ts"
+    "mail-demo": "tsx scripts/mail-demo.ts",
+    "mail-auth-demo": "tsx scripts/mail-auth-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",

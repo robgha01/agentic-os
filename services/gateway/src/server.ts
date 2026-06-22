@@ -7,7 +7,7 @@
  */
 import { config } from "../../../config/agentic-os.config.js";
 import { AuditLogger } from "./audit/audit-log.js";
-import { EventBus } from "./bus/event-bus.js";
+import { EventBus, now } from "./bus/event-bus.js";
 import { GatewayServer } from "./bus/ws-server.js";
 import { Dispatcher } from "./dispatch/dispatcher.js";
 import { Router } from "./routing/router.js";
@@ -41,9 +41,29 @@ async function main(): Promise<void> {
   const router = new Router({ runtime });
 
   // Optional mail backend for inbox triage (disabled unless configured).
+  // Device-code sign-in prompts surface as events (HUD popup) + a notification.
   let mail: MailProvider | undefined;
   try {
-    mail = createMailProvider();
+    mail = createMailProvider(config.mail, process.env, {
+      onPrompt: (p) => {
+        bus.emit({
+          type: "auth.prompt",
+          at: now(),
+          service: "outlook",
+          verificationUri: p.verificationUri,
+          userCode: p.userCode,
+          message: p.message,
+          expiresAt: p.expiresAt,
+        });
+        bus.emit({
+          type: "notification",
+          at: now(),
+          level: "warn",
+          message: `Outlook sign-in needed: open ${p.verificationUri} and enter code ${p.userCode}`,
+        });
+      },
+      onResolved: (ok) => bus.emit({ type: "auth.resolved", at: now(), service: "outlook", ok }),
+    });
   } catch (err) {
     console.warn(`[gateway] mail disabled: ${(err as Error).message}`);
   }

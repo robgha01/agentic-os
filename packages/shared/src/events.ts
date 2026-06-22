@@ -40,7 +40,13 @@ export type OsEvent =
    * audio the HUD plays. `mode` reflects what was actually produced — a voice
    * request that falls back to text reports `mode: "text"`.
    */
-  | { type: "speech"; at: string; text: string; mode: "text" | "voice"; audioUrl?: string; provider?: string };
+  | { type: "speech"; at: string; text: string; mode: "text" | "voice"; audioUrl?: string; provider?: string }
+  /**
+   * A sign-in is needed (e.g. Outlook device-code). The HUD renders this as a
+   * "finish login" prompt — open `verificationUri` and enter `userCode`.
+   */
+  | { type: "auth.prompt"; at: string; service: string; verificationUri: string; userCode: string; message: string; expiresAt: string }
+  | { type: "auth.resolved"; at: string; service: string; ok: boolean };
 
 export type OsEventType = OsEvent["type"];
 

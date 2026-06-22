@@ -7,6 +7,8 @@
  * reads from env with sane fallbacks so the system runs out of the box and is
  * overridable per machine.
  */
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export interface AgenticOsConfig {
   router: {
@@ -72,8 +74,26 @@ export interface AgenticOsConfig {
    */
   mail: {
     provider: "none" | "outlook" | "gmail" | "imap";
-    /** Name of the env var holding the OAuth access token. */
+    /**
+     * How the Graph access token is obtained:
+     *  - "device-code" : built-in browser device-code sign-in (no app reg);
+     *    stores a refresh token and re-prompts only when it expires/revokes.
+     *  - "command"     : run `tokenCommand` to print a token (e.g. az / mgc).
+     *  - "env"         : a static token in $tokenEnv (testing).
+     */
+    tokenSource: "device-code" | "command" | "env";
+    /** Name of the env var holding a static access token (tokenSource "env"). */
     tokenEnv: string;
+    /** Command that prints a Graph token (tokenSource "command"). */
+    tokenCommand: string;
+    /** Public Microsoft client id for device-code (default: Microsoft Graph CLI). */
+    clientId: string;
+    /** Tenant: "common", "organizations", or a tenant id/domain. */
+    tenant: string;
+    /** Space-separated OAuth scopes. */
+    scopes: string;
+    /** Where the refresh token is persisted. */
+    tokenStorePath: string;
     /** Microsoft Graph base URL (override for sovereign clouds). */
     graphBaseUrl: string;
   };
@@ -146,7 +166,23 @@ export const config: AgenticOsConfig = {
       const p = env("AGENTIC_OS_MAIL_PROVIDER", "none");
       return p === "outlook" || p === "gmail" || p === "imap" ? p : "none";
     })(),
+    tokenSource: ((): "device-code" | "command" | "env" => {
+      const s = env("AGENTIC_OS_MAIL_TOKEN_SOURCE", "device-code");
+      return s === "command" || s === "env" ? s : "device-code";
+    })(),
     tokenEnv: env("AGENTIC_OS_MAIL_TOKEN_ENV", "AGENTIC_OS_MAIL_TOKEN"),
+    tokenCommand: env(
+      "AGENTIC_OS_MAIL_TOKEN_COMMAND",
+      "az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv",
+    ),
+    // Microsoft Graph Command Line Tools — Microsoft-published public client.
+    clientId: env("AGENTIC_OS_MAIL_CLIENT_ID", "14d82eec-204b-4c2f-b7e8-296a70dab67e"),
+    tenant: env("AGENTIC_OS_MAIL_TENANT", "common"),
+    scopes: env("AGENTIC_OS_MAIL_SCOPES", "https://graph.microsoft.com/Mail.Read offline_access"),
+    tokenStorePath: env(
+      "AGENTIC_OS_MAIL_TOKEN_STORE",
+      join(homedir(), ".agentic-os", "mail-token.json"),
+    ),
     graphBaseUrl: env("AGENTIC_OS_GRAPH_BASE_URL", "https://graph.microsoft.com/v1.0"),
   },
 };

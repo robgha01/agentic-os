@@ -18,6 +18,7 @@
     "deck-demo": "npm run deck-demo -w @aos/gateway",
     "research-demo": "npm run research-demo -w @aos/gateway",
     "voice-demo": "npm run voice-demo -w @aos/gateway",
-    "mail-demo": "npm run mail-demo -w @aos/gateway"
+    "mail-demo": "npm run mail-demo -w @aos/gateway",
+    "mail-auth-demo": "npm run mail-auth-demo -w @aos/gateway"
   }
 }
