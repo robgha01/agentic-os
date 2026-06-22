@@ -27,6 +27,44 @@ interface Link {
   y2: number;
 }
 
+/**
+ * Where the segment from (sx,sy) toward (ex,ey) first enters the rectangle
+ * (rx0,ry0)-(rx1,ry1) — so the connector ends on the card's edge instead of
+ * running behind it to the centre. Liang-Barsky clip; null if it never enters.
+ */
+function boxEntry(
+  sx: number,
+  sy: number,
+  ex: number,
+  ey: number,
+  rx0: number,
+  ry0: number,
+  rx1: number,
+  ry1: number,
+): { x: number; y: number } | null {
+  const dx = ex - sx;
+  const dy = ey - sy;
+  const p = [-dx, dx, -dy, dy];
+  const q = [sx - rx0, rx1 - sx, sy - ry0, ry1 - sy];
+  let t0 = 0;
+  let t1 = 1;
+  for (let i = 0; i < 4; i++) {
+    if (p[i] === 0) {
+      if (q[i]! < 0) return null;
+    } else {
+      const r = q[i]! / p[i]!;
+      if (p[i]! < 0) {
+        if (r > t1) return null;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0) return null;
+        if (r < t1) t1 = r;
+      }
+    }
+  }
+  return { x: sx + t0 * dx, y: sy + t0 * dy };
+}
+
 export function ContextCards({ hud }: { hud: HudState }) {
   const cards = hud.taskCards;
   const orbitRef = useRef<HTMLDivElement>(null);
@@ -59,12 +97,18 @@ export function ContextCards({ hud }: { hud: HudState }) {
       const el = cardRefs.current.get(card.id);
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      const px = r.left + r.width / 2 - o.left;
-      const py = r.top + r.height / 2 - o.top;
+      const rx0 = r.left - o.left;
+      const ry0 = r.top - o.top;
+      const px = rx0 + r.width / 2;
+      const py = ry0 + r.height / 2;
       const dx = px - cx;
       const dy = py - cy;
       const dist = Math.hypot(dx, dy) || 1;
-      next.push({ id: card.id, x1: cx + (dx / dist) * startR, y1: cy + (dy / dist) * startR, x2: px, y2: py });
+      const sx = cx + (dx / dist) * startR;
+      const sy = cy + (dy / dist) * startR;
+      // End the line on the card's near edge, not behind it at the centre.
+      const hit = boxEntry(sx, sy, px, py, rx0, ry0, rx0 + r.width, ry0 + r.height) ?? { x: px, y: py };
+      next.push({ id: card.id, x1: sx, y1: sy, x2: hit.x, y2: hit.y });
     }
     setSize({ w: o.width, h: o.height });
     setLinks(next);

@@ -223,7 +223,7 @@ a { color: var(--magenta); }
 .ccard__sub { display: block; font-size: 10px; color: var(--mute); margin-top: 3px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* close control lives inside the card, top-right */
 .ccard__x {
-  position: absolute; top: 4px; right: 5px; z-index: 1;
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%); z-index: 1;
   background: none; border: none; color: var(--mute); cursor: pointer;
   font-size: 10px; line-height: 1; padding: 3px;
 }
