@@ -19,6 +19,9 @@ yarn-error.log*
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Voice sidecar generated audio
+services/voice/.audio/
 .venv/
 venv/
 env/

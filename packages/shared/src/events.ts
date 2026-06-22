@@ -33,7 +33,14 @@ export type OsEvent =
   | { type: "operation.completed"; at: string; opId: string; exitCode: number | null }
   | { type: "operation.failed"; at: string; opId: string; error: string }
   | { type: "notification"; at: string; level: "info" | "warn" | "error"; message: string }
-  | { type: "metric"; at: string; name: string; value: number };
+  | { type: "metric"; at: string; name: string; value: number }
+  /**
+   * The OS "saying" something to the user. `text` is always present (the
+   * spoken-as-text content); in voice mode `audioUrl` points to synthesized
+   * audio the HUD plays. `mode` reflects what was actually produced — a voice
+   * request that falls back to text reports `mode: "text"`.
+   */
+  | { type: "speech"; at: string; text: string; mode: "text" | "voice"; audioUrl?: string; provider?: string };
 
 export type OsEventType = OsEvent["type"];
 

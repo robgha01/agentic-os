@@ -3,8 +3,9 @@
  *
  * Single source of truth for hot-swappable knobs: which provider the semantic
  * router defaults to, where Ollama and the Obsidian vault live, gateway/voice
- * ports, and default selection budgets. Everything reads from env with sane
- * fallbacks so the system runs out of the box and is overridable per machine.
+ * ports, default selection budgets, and the optional voice layer. Everything
+ * reads from env with sane fallbacks so the system runs out of the box and is
+ * overridable per machine.
  */
 
 export interface AgenticOsConfig {
@@ -49,6 +50,20 @@ export interface AgenticOsConfig {
     defaultMaxLatencyMs: number;
     defaultMaxCostUsd: number;
   };
+  /**
+   * Optional voice layer. `text` mode (default) needs nothing — spoken
+   * responses are delivered as text. `voice` mode synthesizes audio via the
+   * Python sidecar, which itself can run local engines (faster-whisper/Kokoro,
+   * no keys) or cloud providers (keys the user supplies). Missing deps/keys
+   * fall back to text gracefully.
+   */
+  voice: {
+    mode: "text" | "voice";
+    stt: { provider: string; model?: string; apiKeyEnv?: string };
+    tts: { provider: string; voice?: string; apiKeyEnv?: string };
+    /** Base URL of the optional Python voice sidecar. */
+    sidecarUrl: string;
+  };
 }
 
 function env(name: string, fallback: string): string {
@@ -62,6 +77,13 @@ function envNum(name: string, fallback: number): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
+
+function envOpt(name: string): string | undefined {
+  const v = process.env[name];
+  return v === undefined || v === "" ? undefined : v;
+}
+
+const voicePort = envNum("AGENTIC_OS_VOICE_PORT", 7788);
 
 export const config: AgenticOsConfig = {
   router: {
@@ -86,10 +108,24 @@ export const config: AgenticOsConfig = {
   },
   ports: {
     gateway: envNum("AGENTIC_OS_GATEWAY_PORT", 7777),
-    voice: envNum("AGENTIC_OS_VOICE_PORT", 7788),
+    voice: voicePort,
   },
   budgets: {
     defaultMaxLatencyMs: envNum("AGENTIC_OS_MAX_LATENCY_MS", 8000),
     defaultMaxCostUsd: envNum("AGENTIC_OS_MAX_COST_USD", 0.05),
+  },
+  voice: {
+    mode: env("AGENTIC_OS_VOICE_MODE", "text") === "voice" ? "voice" : "text",
+    stt: {
+      provider: env("AGENTIC_OS_STT_PROVIDER", "faster-whisper"),
+      model: envOpt("AGENTIC_OS_STT_MODEL"),
+      apiKeyEnv: envOpt("AGENTIC_OS_STT_API_KEY_ENV"),
+    },
+    tts: {
+      provider: env("AGENTIC_OS_TTS_PROVIDER", "kokoro"),
+      voice: envOpt("AGENTIC_OS_TTS_VOICE"),
+      apiKeyEnv: envOpt("AGENTIC_OS_TTS_API_KEY_ENV"),
+    },
+    sidecarUrl: env("AGENTIC_OS_VOICE_SIDECAR_URL", `http://localhost:${voicePort}`),
   },
 };

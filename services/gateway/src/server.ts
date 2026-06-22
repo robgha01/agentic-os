@@ -16,6 +16,8 @@ import { SkillLoader } from "./skills/skill-loader.js";
 import { SkillRuntime } from "./skills/skill-runtime.js";
 import { VaultAdapter } from "./memory/vault-adapter.js";
 import { VaultRecorder } from "./memory/vault-recorder.js";
+import { Speaker, SpeechBridge } from "./voice/speaker.js";
+import { createTtsProvider } from "./voice/tts-provider.js";
 
 async function main(): Promise<void> {
   const runtime = await detectRuntime();
@@ -26,6 +28,11 @@ async function main(): Promise<void> {
   // Persist every operation to the vault's daily Operations log (V.A.U.L.T. feed).
   const vault = new VaultAdapter();
   new VaultRecorder(bus, vault);
+
+  // Voice layer: speak the OS's user-facing notifications (text by default,
+  // audio in voice mode via the sidecar — falls back to text if unavailable).
+  const speaker = new Speaker(bus, config.voice.mode, createTtsProvider());
+  new SpeechBridge(bus, speaker);
 
   const loader = new SkillLoader();
   const skillCount = loader.load();
@@ -44,6 +51,7 @@ async function main(): Promise<void> {
   console.log(`[gateway] listening on http://localhost:${server.port}  (ws + /health)`);
   console.log(`[gateway] skills loaded: ${skillCount} (${loader.all().map((s) => s.id).join(", ") || "none"})`);
   console.log(`[gateway] runtime:`, runtime);
+  console.log(`[gateway] voice: mode=${config.voice.mode}` + (config.voice.mode === "voice" ? ` tts=${config.voice.tts.provider} sidecar=${config.voice.sidecarUrl}` : ""));
 
   const shutdown = async (): Promise<void> => {
     console.log("\n[gateway] shutting down…");

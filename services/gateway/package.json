@@ -11,7 +11,8 @@
     "runtime-demo": "tsx scripts/runtime-demo.ts",
     "vault-demo": "tsx scripts/vault-demo.ts",
     "deck-demo": "tsx scripts/deck-demo.ts",
-    "research-demo": "tsx scripts/research-demo.ts"
+    "research-demo": "tsx scripts/research-demo.ts",
+    "voice-demo": "tsx scripts/voice-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
