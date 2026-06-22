@@ -63,6 +63,7 @@ export interface HudState {
   fetchDoc: (path: string) => Promise<VaultDoc | null>;
   fetchConfig: () => Promise<ConfigView>;
   saveSettings: (partial: Record<string, string>) => Promise<void>;
+  saveSecret: (key: string, value: string) => Promise<void>;
 }
 
 const MAX_OPS = 60;
@@ -208,6 +209,10 @@ export function useGateway(): HudState {
     (partial: Record<string, string>) => clientRef.current?.saveSettings(partial) ?? Promise.resolve(),
     [],
   );
+  const saveSecret = useCallback(
+    (key: string, value: string) => clientRef.current?.saveSecret(key, value) ?? Promise.resolve(),
+    [],
+  );
 
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
@@ -238,5 +243,6 @@ export function useGateway(): HudState {
     fetchDoc,
     fetchConfig,
     saveSettings,
+    saveSecret,
   };
 }

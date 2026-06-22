@@ -36,6 +36,10 @@ export interface ConfigView {
   vault: { path: string };
   /** Last-saved settings overlay (may differ from running until restart). */
   saved: Record<string, string>;
+  /** Secret presence only (never values), keyed by secret key. */
+  secrets: Record<string, boolean>;
+  /** Where secrets are stored: "os-keychain" or "encrypted-file". */
+  secretBackend: string;
 }
 
 export class GatewayClient {
@@ -105,6 +109,14 @@ export class GatewayClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(partial),
+    });
+  }
+
+  async saveSecret(key: string, value: string): Promise<void> {
+    await fetch(`${HTTP_BASE}/secrets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ [key]: value }),
     });
   }
 

@@ -14,13 +14,17 @@
     "research-demo": "tsx scripts/research-demo.ts",
     "voice-demo": "tsx scripts/voice-demo.ts",
     "mail-demo": "tsx scripts/mail-demo.ts",
-    "mail-auth-demo": "tsx scripts/mail-auth-demo.ts"
+    "mail-auth-demo": "tsx scripts/mail-auth-demo.ts",
+    "config-demo": "tsx scripts/config-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
     "@aos/shared": "*",
     "gray-matter": "^4.0.3",
     "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^1.1.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

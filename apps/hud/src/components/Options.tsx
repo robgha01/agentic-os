@@ -117,9 +117,49 @@ export function Options({ hud }: { hud: HudState }) {
       </section>
 
       <section className="opt">
+        <h2 className="opt__h">Secrets</h2>
+        <p className="opt__hint">
+          Stored via <strong>{cfg.secretBackend === "os-keychain" ? "your OS keychain" : "encrypted file"}</strong>;
+          never shown again or sent back. Env vars still override at runtime.
+        </p>
+        <SecretField label="Anthropic API key" k="anthropic.apiKey" present={!!cfg.secrets["anthropic.apiKey"]} hud={hud} onSaved={() => setDirty(true)} />
+        <SecretField label="Outlook static token" k="mail.token" present={!!cfg.secrets["mail.token"]} hud={hud} onSaved={() => setDirty(true)} />
+      </section>
+
+      <section className="opt">
         <h2 className="opt__h">Vault</h2>
         <Row label="Path" value={cfg.vault.path} />
       </section>
+    </div>
+  );
+}
+
+function SecretField({ label, k, present, hud, onSaved }: { label: string; k: string; present: boolean; hud: HudState; onSaved: () => void }) {
+  const [value, setValue] = useState("");
+  const [saved, setSaved] = useState(false);
+  const save = () => {
+    if (!value.trim()) return;
+    void hud.saveSecret(k, value.trim());
+    setValue("");
+    setSaved(true);
+    onSaved();
+  };
+  return (
+    <div className="opt__row">
+      <span className="opt__key">
+        {label} <span className={`opt__chip ${present || saved ? "opt__chip--on" : ""}`}>{present || saved ? "set ✓" : "not set"}</span>
+      </span>
+      <span className="opt__secret">
+        <input
+          className="opt__select"
+          type="password"
+          placeholder={present ? "replace…" : "paste value"}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()}
+        />
+        <button className="opt__save" onClick={save}>save</button>
+      </span>
     </div>
   );
 }

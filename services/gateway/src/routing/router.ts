@@ -80,7 +80,7 @@ export function selectRouterProvider(runtime: ModelRuntimeContext): RouterProvid
           id: "haiku",
           bin: config.claudeCode.bin,
         })
-      : new AnthropicHaikuProvider(config.anthropic.routerModel);
+      : new AnthropicHaikuProvider(config.anthropic.routerModel, config.anthropic.apiKey);
 
   if (preferHaiku && (headless ? runtime.networkUp : haikuViaSdk)) {
     return buildHaiku();
@@ -96,7 +96,7 @@ export function selectRouterProvider(runtime: ModelRuntimeContext): RouterProvid
 export function probeRuntime(): ModelRuntimeContext {
   return {
     networkUp: true,
-    anthropicKeyPresent: Boolean(process.env[config.anthropic.apiKeyEnv]),
+    anthropicKeyPresent: Boolean(config.anthropic.apiKey),
     // Real reachability is async; the demo script overrides this with a live probe.
     ollamaReachable: false,
   };

@@ -95,14 +95,11 @@ class ClaudeHeadlessLlm implements LlmService {
   }
 }
 
-export function createLlmService(
-  cfg = config,
-  env: NodeJS.ProcessEnv = process.env,
-): LlmService | undefined {
+export function createLlmService(cfg = config): LlmService | undefined {
   if (cfg.router.transport === "headless") {
     return new ClaudeHeadlessLlm(cfg.anthropic.heavyModel, cfg.claudeCode.bin);
   }
-  const key = env[cfg.anthropic.apiKeyEnv];
-  if (!key) return undefined; // sdk transport but no key -> no synthesis
-  return new AnthropicSdkLlm(cfg.anthropic.heavyModel, key);
+  // sdk transport: resolved key (env → encrypted config) or no synthesis.
+  if (!cfg.anthropic.apiKey) return undefined;
+  return new AnthropicSdkLlm(cfg.anthropic.heavyModel, cfg.anthropic.apiKey);
 }

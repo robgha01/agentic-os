@@ -8,7 +8,14 @@ import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientCommand, OsEvent } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
-import { settingsAll, writeSettings } from "../../../../config/settings.js";
+import {
+  editableView,
+  isEditableKey,
+  isSecretKey,
+  secretBackendId,
+  secretPresence,
+  setValues,
+} from "../../../../config/config-store.js";
 import type { Dispatcher } from "../dispatch/dispatcher.js";
 import type { SkillLoader } from "../skills/skill-loader.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
@@ -48,14 +55,22 @@ export class GatewayServer {
         return res.end();
       }
 
-      // Persist edited settings from the Options panel (applies on restart).
-      if (req.method === "POST" && url.pathname === "/settings") {
+      // Persist edits from the Options panel (applies on restart). /settings
+      // takes non-secret editable keys; /secrets takes secret keys (encrypted /
+      // keychained, never echoed back).
+      if (req.method === "POST" && (url.pathname === "/settings" || url.pathname === "/secrets")) {
+        const wantSecret = url.pathname === "/secrets";
         let body = "";
         req.on("data", (c) => (body += c));
         req.on("end", () => {
           try {
-            const saved = writeSettings(JSON.parse(body || "{}") as Record<string, unknown>);
-            json(res, { ok: true, saved, restartRequired: true });
+            const input = JSON.parse(body || "{}") as Record<string, unknown>;
+            const allowed: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input)) {
+              if (wantSecret ? isSecretKey(k) : isEditableKey(k)) allowed[k] = v;
+            }
+            setValues(allowed);
+            json(res, { ok: true, saved: Object.keys(allowed), restartRequired: true });
           } catch {
             json(res, { ok: false, error: "invalid JSON" }, 400);
           }
@@ -88,7 +103,10 @@ export class GatewayServer {
             vault: { path: config.vault.path },
             // Saved overlay (what the Options panel last wrote) — may differ from
             // the running values above until the gateway restarts.
-            saved: settingsAll(),
+            saved: editableView(),
+            // Secret presence only (never values) + which backend stores them.
+            secrets: secretPresence(),
+            secretBackend: secretBackendId,
           });
         // Recent vault records — the V.A.U.L.T. feed.
         case "/vault/recent":

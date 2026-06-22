@@ -315,6 +315,16 @@ a { color: var(--magenta); }
   font-family: var(--mono); font-size: 12px; padding: 5px 8px; border-radius: 5px; min-width: 160px;
 }
 .opt__select:focus { outline: none; border-color: var(--magenta); }
+.opt__secret { display: flex; gap: 6px; }
+.opt__save {
+  background: var(--magenta); color: #11020a; border: none; border-radius: 5px;
+  font-family: var(--mono); font-weight: 700; font-size: 10px; text-transform: uppercase; padding: 0 12px; cursor: pointer;
+}
+.opt__chip {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--mute);
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; margin-left: 6px;
+}
+.opt__chip--on { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 50%, var(--line)); }
 .opt__banner {
   border: 1px solid color-mix(in srgb, var(--cyan) 50%, var(--line));
   background: color-mix(in srgb, var(--cyan) 10%, transparent);

@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   // Device-code sign-in prompts surface as events (HUD popup) + a notification.
   let mail: MailProvider | undefined;
   try {
-    mail = createMailProvider(config.mail, process.env, {
+    mail = createMailProvider(config.mail, {
       onPrompt: (p) => {
         bus.emit({
           type: "auth.prompt",

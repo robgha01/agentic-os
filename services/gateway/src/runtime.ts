@@ -18,7 +18,7 @@ export async function detectRuntime(): Promise<ModelRuntimeContext> {
 
   return {
     networkUp: true,
-    anthropicKeyPresent: Boolean(process.env[config.anthropic.apiKeyEnv]),
+    anthropicKeyPresent: Boolean(config.anthropic.apiKey),
     ollamaReachable,
   };
 }

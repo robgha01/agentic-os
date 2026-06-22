@@ -90,11 +90,14 @@ export interface MailHooks {
 }
 
 /** Build the Graph token provider implied by config.mail.tokenSource. */
-function buildTokenProvider(mailConfig: typeof config.mail, env: NodeJS.ProcessEnv, hooks: MailHooks): GraphTokenProvider {
+function buildTokenProvider(mailConfig: typeof config.mail, hooks: MailHooks): GraphTokenProvider {
   switch (mailConfig.tokenSource) {
     case "env": {
-      const token = env[mailConfig.tokenEnv];
-      if (!token) throw new Error(`mail tokenSource "env" needs a token in $${mailConfig.tokenEnv}`);
+      // Resolved token: env ($tokenEnv) → encrypted config ("mail.token").
+      const token = mailConfig.token;
+      if (!token) {
+        throw new Error(`mail tokenSource "env" needs a token (set $${mailConfig.tokenEnv} or store "mail.token")`);
+      }
       return new StaticTokenProvider(token);
     }
     case "command":
@@ -121,14 +124,13 @@ function consolePrompt(p: DeviceCodePrompt): void {
  */
 export function createMailProvider(
   mailConfig = config.mail,
-  envSource: NodeJS.ProcessEnv = process.env,
   hooks: MailHooks = {},
 ): MailProvider | undefined {
   switch (mailConfig.provider) {
     case "none":
       return undefined;
     case "outlook":
-      return new OutlookGraphProvider(buildTokenProvider(mailConfig, envSource, hooks), mailConfig.graphBaseUrl);
+      return new OutlookGraphProvider(buildTokenProvider(mailConfig, hooks), mailConfig.graphBaseUrl);
     case "gmail":
     case "imap":
       throw new Error(`mail provider "${mailConfig.provider}" is not yet implemented`);
