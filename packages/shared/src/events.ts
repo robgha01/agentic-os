@@ -1,0 +1,43 @@
+/**
+ * OS event contracts — the wire format between the gateway and the HUD.
+ *
+ * The gateway emits `OsEvent`s onto its event bus; the WebSocket server
+ * broadcasts them to connected HUD clients. Clients send `ClientCommand`s back
+ * (e.g. a typed/spoken request to route). Shared here so the HUD (Phase 4) and
+ * the gateway speak exactly the same types.
+ */
+import type { RoutedIntent } from "./actions.js";
+import type { ModelSelection } from "./models.js";
+
+/** Identity + selection context for one dispatched operation. */
+export interface OperationDescriptor {
+  opId: string;
+  actionId: string;
+  /** The skill bound to the action, or null when no skill is bound. */
+  skillId: string | null;
+  /** The model chosen for this op, or null (deterministic / no skill). */
+  selection: ModelSelection | null;
+}
+
+/** Everything the gateway can announce. `at` is an ISO-8601 timestamp. */
+export type OsEvent =
+  | { type: "routing.resolved"; at: string; intent: RoutedIntent }
+  | { type: "operation.started"; at: string; op: OperationDescriptor }
+  | {
+      type: "operation.output";
+      at: string;
+      opId: string;
+      stream: "stdout" | "stderr";
+      chunk: string;
+    }
+  | { type: "operation.completed"; at: string; opId: string; exitCode: number | null }
+  | { type: "operation.failed"; at: string; opId: string; error: string }
+  | { type: "notification"; at: string; level: "info" | "warn" | "error"; message: string }
+  | { type: "metric"; at: string; name: string; value: number };
+
+export type OsEventType = OsEvent["type"];
+
+/** Commands a HUD/voice client can send to the gateway. */
+export type ClientCommand =
+  | { type: "route"; input: string }
+  | { type: "ping" };

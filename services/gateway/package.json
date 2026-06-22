@@ -6,14 +6,18 @@
   "description": "Agentic OS orchestrator: routing engine, model selection, skill dispatch, HUD feed.",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "route-demo": "tsx scripts/route-demo.ts"
+    "start": "tsx src/server.ts",
+    "route-demo": "tsx scripts/route-demo.ts",
+    "runtime-demo": "tsx scripts/runtime-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
-    "@aos/shared": "*"
+    "@aos/shared": "*",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }
