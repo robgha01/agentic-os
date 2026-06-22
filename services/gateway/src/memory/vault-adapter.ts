@@ -58,6 +58,11 @@ export class VaultAdapter {
     return recordPath(this.root, type, key);
   }
 
+  /** Absolute record path -> vault-relative form (forward slashes) for the HUD. */
+  toRelative(absPath: string): string {
+    return relative(this.root, absPath).replace(/\\/g, "/");
+  }
+
   exists(type: DocumentType, key: string): boolean {
     return existsSync(this.pathFor(type, key));
   }

@@ -9,6 +9,16 @@
 import type { RoutedIntent } from "./actions.js";
 import type { ModelSelection } from "./models.js";
 
+/** The vault record an operation produced — lets the HUD link a result card to its doc. */
+export interface OperationResult {
+  /** Vault-relative path, e.g. "10-research/bitcoin.md" (opens in the doc viewer). */
+  path: string;
+  /** Human title, used as the notification card's label. */
+  title: string;
+  /** Document type ("research" | "inbox" | "daily" | ...). */
+  type: string;
+}
+
 /** Identity + selection context for one dispatched operation. */
 export interface OperationDescriptor {
   opId: string;
@@ -30,7 +40,7 @@ export type OsEvent =
       stream: "stdout" | "stderr";
       chunk: string;
     }
-  | { type: "operation.completed"; at: string; opId: string; exitCode: number | null }
+  | { type: "operation.completed"; at: string; opId: string; exitCode: number | null; result?: OperationResult }
   | { type: "operation.failed"; at: string; opId: string; error: string }
   | { type: "notification"; at: string; level: "info" | "warn" | "error"; message: string }
   | { type: "metric"; at: string; name: string; value: number }

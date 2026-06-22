@@ -43,6 +43,21 @@ export interface AuthPromptView {
   message: string;
 }
 
+/**
+ * A finished operation, surfaced as a notification card orbiting the core.
+ * Spawned on completion; clicking a card with a `resultPath` opens that doc.
+ */
+export interface TaskCardView {
+  id: number;
+  opId: string;
+  label: string;
+  status: "done" | "failed";
+  resultPath?: string;
+  resultType?: string;
+  error?: string;
+  at: string;
+}
+
 export interface HudState {
   status: ConnectionStatus;
   skills: SkillCard[];
@@ -55,8 +70,11 @@ export interface HudState {
   coreState: CoreState;
   records: VaultSummary[];
   openDocPath: string | null;
+  taskCards: TaskCardView[];
   send: (cmd: ClientCommand) => void;
   clearNotifications: () => void;
+  dismissCard: (id: number) => void;
+  clearCards: () => void;
   setListening: (on: boolean) => void;
   openDoc: (path: string) => void;
   closeDoc: () => void;
@@ -68,7 +86,14 @@ export interface HudState {
 
 const MAX_OPS = 60;
 const MAX_NOTES = 40;
+const MAX_CARDS = 8;
 const SERIES_LEN = 32;
+
+/** "inbox-triage" -> "Inbox triage" — a readable fallback label. */
+function prettify(id: string): string {
+  const s = id.replace(/[-_]+/g, " ").trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : id;
+}
 
 export function useGateway(): HudState {
   const clientRef = useRef<GatewayClient>();
@@ -83,8 +108,12 @@ export function useGateway(): HudState {
   const [listening, setListening] = useState(false);
   const [records, setRecords] = useState<VaultSummary[]>([]);
   const [openDocPath, setOpenDocPath] = useState<string | null>(null);
+  const [taskCards, setTaskCards] = useState<TaskCardView[]>([]);
 
   const noteId = useRef(0);
+  const cardId = useRef(0);
+  // opId -> the started op's identity, so completion cards can be labelled.
+  const opMeta = useRef(new Map<string, { actionId: string; skillId: string | null }>());
   const sinceTick = useRef(0);
   const runningCount = useRef(0);
   const [runningTick, setRunningTick] = useState(0); // forces coreState recompute
@@ -98,6 +127,7 @@ export function useGateway(): HudState {
       case "operation.started":
         runningCount.current += 1;
         setRunningTick((t) => t + 1);
+        opMeta.current.set(e.op.opId, { actionId: e.op.actionId, skillId: e.op.skillId });
         setOperations((ops) =>
           [
             {
@@ -117,22 +147,52 @@ export function useGateway(): HudState {
           ops.map((o) => (o.opId === e.opId ? { ...o, output: (o.output + e.chunk).slice(-4000) } : o)),
         );
         break;
-      case "operation.completed":
+      case "operation.completed": {
         runningCount.current = Math.max(0, runningCount.current - 1);
         setRunningTick((t) => t + 1);
         setSettledCount((c) => c + 1);
         setOperations((ops) =>
           ops.map((o) => (o.opId === e.opId ? { ...o, status: "done", exitCode: e.exitCode } : o)),
         );
+        // A completed op that produced a vault record spawns a notification card.
+        if (e.result) {
+          const result = e.result;
+          setTaskCards((cards) =>
+            [
+              {
+                id: cardId.current++,
+                opId: e.opId,
+                label: result.title,
+                status: "done" as const,
+                resultPath: result.path,
+                resultType: result.type,
+                at: e.at,
+              },
+              ...cards.filter((c) => c.opId !== e.opId),
+            ].slice(0, MAX_CARDS),
+          );
+        }
+        opMeta.current.delete(e.opId);
         break;
-      case "operation.failed":
+      }
+      case "operation.failed": {
         runningCount.current = Math.max(0, runningCount.current - 1);
         setRunningTick((t) => t + 1);
         setSettledCount((c) => c + 1);
         setOperations((ops) =>
           ops.map((o) => (o.opId === e.opId ? { ...o, status: "failed", error: e.error } : o)),
         );
+        const meta = opMeta.current.get(e.opId);
+        const label = prettify(meta?.skillId ?? meta?.actionId ?? "task");
+        setTaskCards((cards) =>
+          [
+            { id: cardId.current++, opId: e.opId, label, status: "failed" as const, error: e.error, at: e.at },
+            ...cards.filter((c) => c.opId !== e.opId),
+          ].slice(0, MAX_CARDS),
+        );
+        opMeta.current.delete(e.opId);
         break;
+      }
       case "notification":
         setNotifications((n) =>
           [{ id: noteId.current++, level: e.level, message: e.message, at: e.at }, ...n].slice(0, MAX_NOTES),
@@ -195,6 +255,8 @@ export function useGateway(): HudState {
 
   const send = useCallback((cmd: ClientCommand) => clientRef.current?.send(cmd), []);
   const clearNotifications = useCallback(() => setNotifications([]), []);
+  const dismissCard = useCallback((id: number) => setTaskCards((cards) => cards.filter((c) => c.id !== id)), []);
+  const clearCards = useCallback(() => setTaskCards([]), []);
   const openDoc = useCallback((path: string) => setOpenDocPath(path), []);
   const closeDoc = useCallback(() => setOpenDocPath(null), []);
   const fetchDoc = useCallback(
@@ -235,8 +297,11 @@ export function useGateway(): HudState {
     coreState,
     records,
     openDocPath,
+    taskCards,
     send,
     clearNotifications,
+    dismissCard,
+    clearCards,
     setListening,
     openDoc,
     closeDoc,

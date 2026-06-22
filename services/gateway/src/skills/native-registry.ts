@@ -231,10 +231,11 @@ const compileResearch: NativeHandler = async (ctx) => {
     ? { Analysis: synthesis, "Key findings": keyFindings }
     : { "Key findings": keyFindings };
 
+  const title = `${topic} — last 30 days`;
   const built = buildResultDocument({
     type: "research",
     key: topic,
-    title: `${topic} — last 30 days`,
+    title,
     source: "last-30-days",
     tldr,
     sections,
@@ -249,6 +250,7 @@ const compileResearch: NativeHandler = async (ctx) => {
 
   const path = ctx.services.vault.writeGenerated(built.frontmatter, built.generated);
   ctx.context.researchPath = path;
+  ctx.context.result = { path: ctx.services.vault.toRelative(path), title, type: "research" };
   ctx.emit(`compile-research: ${items.length} items -> ${path}\n`);
   return 0;
 };
@@ -292,10 +294,11 @@ const inboxTriage: NativeHandler = async (ctx) => {
     "- (no unread mail)";
 
   const dateKey = (ctx.services.nowIso().split("T")[0] ?? ctx.services.nowIso()).slice(0, 10);
+  const title = `Inbox triage — ${dateKey}`;
   const built = buildResultDocument({
     type: "inbox",
     key: dateKey,
-    title: `Inbox triage — ${dateKey}`,
+    title,
     source: "inbox-triage",
     tldr: `${messages.length} unread; ${actionable.length} likely need a reply.`,
     sections: { "Action items": actionItems, "By sender": senderLines },
@@ -308,6 +311,7 @@ const inboxTriage: NativeHandler = async (ctx) => {
   });
 
   const path = ctx.services.vault.writeGenerated(built.frontmatter, built.generated);
+  ctx.context.result = { path: ctx.services.vault.toRelative(path), title, type: "inbox" };
   ctx.emit(`inbox-triage: ${messages.length} unread, ${actionable.length} actionable -> ${path}\n`);
   return 0;
 };

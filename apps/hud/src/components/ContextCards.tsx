@@ -1,83 +1,73 @@
 /**
- * Floating context cards — the four panels anchored to the corners around the
- * core (per the HUD blueprint). Local cards open the newest matching vault
- * record in the document viewer; external cards open a URL. Each has an X to
- * dismiss; a top-center "clear all" flushes the visible set (session-only —
- * they return on reload).
+ * Context cards — notifications for tasks that just ran, anchored around the
+ * core and connected to it by a spoke.
+ *
+ * Each finished operation that produced a vault record spawns a card named
+ * after the task's result; clicking it opens that result in the document
+ * viewer. Failed tasks spawn a non-clickable error card. Cards fill the four
+ * corners around the sphere (stacking when more than four are live); each has
+ * an X to dismiss, and a top-center "clear all" flushes the set. Cards are
+ * session-only — they appear as tasks complete and clear on reload.
  */
-import { useState } from "react";
-import type { HudState } from "../useGateway.js";
+import type { CSSProperties } from "react";
+import type { HudState, TaskCardView } from "../useGateway.js";
 
-type Corner = "tl" | "tr" | "bl" | "br";
-
-interface CardDef {
-  id: string;
-  label: string;
-  corner: Corner;
-  kind: "doc" | "link";
-  docType?: string;
-  url?: string;
-  hint: string;
-}
-
-const CARDS: CardDef[] = [
-  { id: "morning-report", label: "Morning Report", corner: "tl", kind: "doc", docType: "daily", hint: "latest daily log" },
-  { id: "inbox-brief", label: "Inbox Brief", corner: "tr", kind: "doc", docType: "inbox", hint: "email triage" },
-  { id: "inbox", label: "Inbox", corner: "bl", kind: "link", url: "https://outlook.office.com/mail/", hint: "open mailbox" },
-  { id: "source", label: "Source", corner: "br", kind: "link", url: "https://www.anthropic.com", hint: "reference" },
-];
+// Corner order: newest card takes top-right, then top-left, bottom-left,
+// bottom-right — matching the HUD blueprint. Extra cards stack in the corners.
+const CORNERS = ["tr", "tl", "bl", "br"] as const;
+const STACK_GAP = 64; // px offset when a corner holds more than one card
 
 export function ContextCards({ hud }: { hud: HudState }) {
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const visible = CARDS.filter((c) => !hidden.has(c.id));
-  if (visible.length === 0) return null;
-
-  const newestOf = (type?: string) => hud.records.find((r) => r.type === type);
-
-  const activate = (c: CardDef) => {
-    if (c.kind === "link" && c.url) {
-      window.open(c.url, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const rec = newestOf(c.docType);
-    if (rec) hud.openDoc(rec.path);
-    else if (c.id === "inbox-brief") hud.send({ type: "invoke", skillId: "inbox-triage" });
-  };
-
-  const dismiss = (id: string) =>
-    setHidden((s) => {
-      const next = new Set(s);
-      next.add(id);
-      return next;
-    });
+  const cards = hud.taskCards;
+  if (cards.length === 0) return null;
 
   return (
-    <>
-      <button className="cards__clear" onClick={() => setHidden(new Set(CARDS.map((c) => c.id)))}>
-        clear all ×{visible.length}
+    <div className="orbit" aria-label="recent task notifications">
+      <button className="orbit__clear" onClick={hud.clearCards}>
+        clear all ×{cards.length}
       </button>
-      {visible.map((c) => {
-        const rec = c.kind === "doc" ? newestOf(c.docType) : undefined;
-        const sub =
-          c.kind === "link"
-            ? c.hint
-            : rec
-              ? rec.title
-              : c.id === "inbox-brief"
-                ? "run triage →"
-                : "none yet";
+      {cards.map((c, i) => {
+        const corner = CORNERS[i % CORNERS.length]!;
+        const stack = Math.floor(i / CORNERS.length);
+        const offset = stack * STACK_GAP;
+        const down = corner === "tr" || corner === "tl";
+        const style = down ? { marginTop: offset } : { marginBottom: offset };
         return (
-          <div key={c.id} className={`ccard ccard--${c.corner}`}>
-            <button className="ccard__body" onClick={() => activate(c)} title={sub}>
-              <span className="ccard__label">{c.label}</span>
-              <span className="ccard__sub">{sub}</span>
-            </button>
-            <button className="ccard__x" onClick={() => dismiss(c.id)} aria-label={`Dismiss ${c.label}`}>
-              ✕
-            </button>
-          </div>
+          <Card key={c.id} card={c} corner={corner} style={style} hud={hud} />
         );
       })}
-    </>
+    </div>
+  );
+}
+
+function Card({
+  card: c,
+  corner,
+  style,
+  hud,
+}: {
+  card: TaskCardView;
+  corner: string;
+  style: CSSProperties;
+  hud: HudState;
+}) {
+  const clickable = c.status === "done" && Boolean(c.resultPath);
+  const sub =
+    c.status === "failed" ? (c.error ?? "failed") : c.resultType ? `${c.resultType} · open ↗` : "open ↗";
+  return (
+    <div className={`ccard ccard--${corner}`} style={style} data-status={c.status}>
+      <button
+        className="ccard__body"
+        onClick={() => clickable && hud.openDoc(c.resultPath!)}
+        disabled={!clickable}
+        title={clickable ? `Open ${c.label}` : c.error}
+      >
+        <span className="ccard__label">{c.label}</span>
+        <span className="ccard__sub">{sub}</span>
+      </button>
+      <button className="ccard__x" onClick={() => hud.dismissCard(c.id)} aria-label={`Dismiss ${c.label}`}>
+        ✕
+      </button>
+    </div>
   );
 }

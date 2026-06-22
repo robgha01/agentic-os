@@ -14,7 +14,7 @@
  * steps only stream output under the same opId.
  */
 import { spawn } from "node:child_process";
-import type { ModelSelection, RoutedIntent, SkillManifest } from "@aos/shared";
+import type { ModelSelection, OperationResult, RoutedIntent, SkillManifest } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import { EventBus, now } from "../bus/event-bus.js";
 import { NATIVE_HANDLERS, type SkillServices } from "./native-registry.js";
@@ -50,7 +50,7 @@ export class SkillRuntime {
   ): Promise<void> {
     const context: Record<string, unknown> = {};
     const result = await this.runOne(skill, intent, selection, context, opId);
-    if (result.ok) this.complete(opId, result.exitCode);
+    if (result.ok) this.complete(opId, result.exitCode, context.result as OperationResult | undefined);
     else this.fail(opId, result.error ?? `exit ${result.exitCode}`);
   }
 
@@ -145,8 +145,8 @@ export class SkillRuntime {
     this.bus.emit({ type: "operation.output", at: now(), opId, stream, chunk });
   }
 
-  private complete(opId: string, exitCode: number | null): void {
-    this.bus.emit({ type: "operation.completed", at: now(), opId, exitCode });
+  private complete(opId: string, exitCode: number | null, result?: OperationResult): void {
+    this.bus.emit({ type: "operation.completed", at: now(), opId, exitCode, ...(result ? { result } : {}) });
   }
 
   private fail(opId: string, error: string): void {
