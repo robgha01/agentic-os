@@ -183,9 +183,12 @@ a { color: var(--magenta); }
   color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1;
 }
 .center__count-label { text-transform: uppercase; letter-spacing: 0.28em; font-size: 9px; color: var(--mute); }
-/* ---- Task notification cards (orbit the core, connected by a spoke) ---- */
+/* ---- Task notification cards (orbit the core, connected by a drawn line) ---- */
 .orbit { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
-.orbit > * { pointer-events: auto; }
+.orbit > *:not(.orbit__links) { pointer-events: auto; }
+.orbit__links { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: visible; }
+.orbit__links line { stroke: var(--violet); stroke-width: 1; opacity: 0.5; }
+.orbit__links circle { fill: var(--magenta); opacity: 0.85; }
 .orbit__clear {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em;
@@ -194,13 +197,13 @@ a { color: var(--magenta); }
 }
 .orbit__clear:hover { color: var(--ink); border-color: var(--magenta); }
 .ccard {
-  position: absolute; display: flex; align-items: flex-start; gap: 4px;
+  position: absolute; display: flex; align-items: flex-start; gap: 4px; z-index: 3;
   animation: ccard-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-.ccard--tl { top: 12%; left: 3%; }
-.ccard--tr { top: 12%; right: 3%; flex-direction: row-reverse; }
-.ccard--bl { bottom: 16%; left: 3%; }
-.ccard--br { bottom: 16%; right: 3%; flex-direction: row-reverse; }
+.ccard--tl { top: 14%; left: 6%; }
+.ccard--tr { top: 14%; right: 6%; flex-direction: row-reverse; }
+.ccard--bl { bottom: 18%; left: 6%; }
+.ccard--br { bottom: 18%; right: 6%; flex-direction: row-reverse; }
 @keyframes ccard-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
 .ccard__body {
   position: relative; min-width: 150px; max-width: 210px; text-align: left; cursor: pointer;
@@ -210,12 +213,6 @@ a { color: var(--magenta); }
 .ccard--tr .ccard__body, .ccard--br .ccard__body { text-align: right; }
 .ccard__body:hover:not(:disabled) { border-color: var(--magenta); box-shadow: 0 0 18px rgba(255, 61, 154, 0.18); }
 .ccard__body:disabled { cursor: default; }
-/* spoke toward the core */
-.ccard__body::after {
-  content: ""; position: absolute; top: 50%; width: 30px; height: 1px;
-}
-.ccard--tl .ccard__body::after, .ccard--bl .ccard__body::after { right: -30px; background: linear-gradient(90deg, var(--violet), transparent); }
-.ccard--tr .ccard__body::after, .ccard--br .ccard__body::after { left: -30px; background: linear-gradient(270deg, var(--violet), transparent); }
 /* failed tasks read red */
 .ccard[data-status="failed"] .ccard__body { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); }
 .ccard[data-status="failed"] .ccard__label { color: var(--danger); }
