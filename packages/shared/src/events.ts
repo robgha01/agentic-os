@@ -66,4 +66,6 @@ export type ClientCommand =
   | { type: "route"; input: string }
   /** Deterministic command-deck button -> invoke a skill by id, no routing. */
   | { type: "invoke"; skillId: string; params?: Record<string, unknown> }
+  /** Speak a vault record aloud — the OS reads its spoken core (TL;DR blockquote). */
+  | { type: "speak"; path: string }
   | { type: "ping" };

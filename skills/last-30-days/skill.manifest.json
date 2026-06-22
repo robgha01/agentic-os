@@ -9,7 +9,8 @@
     "icon": "telescope",
     "group": "Knowledge",
     "inputs": [
-      { "name": "topic", "type": "string", "label": "Topic", "required": true }
+      { "name": "topic", "type": "string", "label": "Topic", "required": true },
+      { "name": "force", "type": "boolean", "label": "Force refresh", "default": false }
     ]
   },
   "modelPolicy": {
@@ -21,5 +22,6 @@
     "steps": ["fetch-hackernews", "fetch-reddit", "synthesize-research", "compile-research"]
   },
   "vaultOutput": "10-research/{{topic}}.md",
-  "staleAfterMinutes": 1440
+  "staleAfterMinutes": 1440,
+  "produces": { "type": "research", "keyParam": "topic" }
 }

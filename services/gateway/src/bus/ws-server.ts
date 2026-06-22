@@ -20,6 +20,7 @@ import {
 import type { Dispatcher } from "../dispatch/dispatcher.js";
 import type { SkillLoader } from "../skills/skill-loader.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
+import { extractSpokenCore } from "../memory/document-builder.js";
 import type { EventBus } from "./event-bus.js";
 
 export class GatewayServer {
@@ -35,6 +36,7 @@ export class GatewayServer {
     private readonly vault: VaultAdapter,
     private readonly requestedPort: number,
     private readonly onSettingsChange?: () => Promise<void>,
+    private readonly speak?: (text: string) => void,
   ) {
     // Localhost single-user tool: allow the HUD (served from a dev/other port)
     // to read these GET endpoints cross-origin.
@@ -188,9 +190,21 @@ export class GatewayServer {
           .invoke(cmd.skillId, cmd.params ?? {}, { requireDeck: true })
           .catch((err) => this.emitDispatchError(err));
         return;
+      case "speak":
+        // Read a record's spoken core (TL;DR blockquote) aloud.
+        this.speakDocument(cmd.path);
+        return;
       default:
         this.send(ws, { type: "notification", at: new Date().toISOString(), level: "error", message: "unknown command" });
     }
+  }
+
+  private speakDocument(path: string): void {
+    const doc = this.vault.readByPath(path);
+    if (!doc) return;
+    const core = extractSpokenCore(doc.body);
+    const text = core || `${doc.frontmatter.title}.`;
+    this.speak?.(text);
   }
 
   private emitDispatchError(err: unknown): void {

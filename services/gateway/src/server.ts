@@ -66,7 +66,7 @@ async function main(): Promise<void> {
   const router = new Router({ runtime });
   const speaker = new Speaker(bus, config.voice.mode, createTtsProvider());
   new SpeechBridge(bus, speaker);
-  const dispatcher = new Dispatcher(router, loader, bus, runtime, new SkillRuntime(bus, loader, buildServices()));
+  const dispatcher = new Dispatcher(router, loader, bus, runtime, vault, new SkillRuntime(bus, loader, buildServices()));
 
   // Live apply: reload config from the store/env and rebuild affected pieces.
   async function applyConfig(): Promise<void> {
@@ -82,7 +82,9 @@ async function main(): Promise<void> {
     console.log(`[gateway] config applied — transport=${config.router.transport} voice=${config.voice.mode} mail=${config.mail.provider}`);
   }
 
-  const server = new GatewayServer(bus, dispatcher, loader, vault, config.ports.gateway, applyConfig);
+  const server = new GatewayServer(bus, dispatcher, loader, vault, config.ports.gateway, applyConfig, (text) =>
+    void speaker.say(text),
+  );
   await server.start();
 
   console.log(`[gateway] listening on http://localhost:${server.port}  (ws + /health)`);

@@ -88,6 +88,13 @@ export function buildResultDocument(input: ResultDocumentInput): BuiltDocument {
     parts.push(`## Sources\n\n${list}`);
   }
 
+  // Contextual backlinks as in-body [[wikilinks]] so Obsidian's graph connects
+  // this node to related notes (the frontmatter `links` field alone doesn't).
+  if (input.links && input.links.length > 0) {
+    const links = input.links.map((l) => `[[${l}]]`).join(" · ");
+    parts.push(`## Related\n\n${links}`);
+  }
+
   // Provenance lives in the frontmatter (source/model/status/confidence), so the
   // body stays human-first — no footer.
   const status: VaultStatus = input.status ?? "complete";
@@ -114,4 +121,30 @@ export function buildResultDocument(input: ResultDocumentInput): BuiltDocument {
 
 function nonEmpty(s: string | undefined): boolean {
   return typeof s === "string" && s.trim().length > 0;
+}
+
+/**
+ * The "spoken core" — the leading blockquote (our TL;DR) that the voice layer
+ * reads aloud, skipping headings, tables, code, and links below it. Returns the
+ * blockquote text with markdown stripped, or "" if there's no blockquote.
+ */
+export function extractSpokenCore(body: string): string {
+  const lines = body.split("\n");
+  const quote: string[] = [];
+  let started = false;
+  for (const line of lines) {
+    if (line.trimStart().startsWith(">")) {
+      started = true;
+      quote.push(line.replace(/^\s*>\s?/, ""));
+    } else if (started) {
+      if (line.trim() === "") continue; // tolerate blank lines inside the quote
+      break; // first non-quote, non-blank line ends the spoken core
+    }
+  }
+  return quote
+    .join(" ")
+    .replace(/\*\*TL;DR\*\*\s*[—-]?\s*/i, "") // drop the TL;DR label
+    .replace(/[*_`#[\]]/g, "") // strip residual markdown emphasis/markers
+    .replace(/\s+/g, " ")
+    .trim();
 }

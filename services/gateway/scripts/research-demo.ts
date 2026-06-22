@@ -45,6 +45,7 @@ async function main(): Promise<void> {
   // Stub LLM so synthesis is deterministic + offline.
   const stubLlm = {
     id: "stub",
+    model: "stub-model",
     async complete() {
       return "## Signal\nStubbed grounded summary of rust async [1].\n## Rising\n- Runtime consolidation [1]\n## Friction\n- Not evident in the last 30 days of items.";
     },

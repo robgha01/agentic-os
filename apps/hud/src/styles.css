@@ -311,6 +311,12 @@ a { color: var(--magenta); }
   border-radius: 999px; padding: 4px 10px; white-space: nowrap;
 }
 .docviewer__obsidian:hover { color: var(--ink); border-color: var(--violet); }
+.docviewer__speak {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--mute);
+  background: none; cursor: pointer; border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+}
+.docviewer__speak:hover { color: var(--ink); border-color: var(--magenta); }
 .docviewer__close { background: none; border: none; color: var(--mute); cursor: pointer; font-size: 14px; }
 .docviewer__close:hover { color: var(--magenta); }
 .doc { overflow: auto; padding: 28px 32px; }

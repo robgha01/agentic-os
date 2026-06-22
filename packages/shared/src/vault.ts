@@ -41,8 +41,19 @@ export const VaultFrontmatterSchema = z.object({
   /** TTL in minutes; powers the check-exists-or-execute loop. Omit = never auto-stale. */
   staleAfterMinutes: z.number().int().positive().optional(),
   tags: z.array(z.string()).default([]),
-  /** What the task was asked — the inputs that produced this result. */
-  inputs: z.record(z.unknown()).default({}),
+  /**
+   * What the task was asked — the inputs that produced this result. Stored as a
+   * flat "key: value" list so Obsidian's Properties panel renders it cleanly
+   * (nested objects show as "unsupported"). Accepts a legacy object on read and
+   * normalizes it, so older records still parse.
+   */
+  inputs: z
+    .preprocess((v) => {
+      if (Array.isArray(v)) return v.map(String);
+      if (v && typeof v === "object") return Object.entries(v).map(([k, val]) => `${k}: ${val}`);
+      return [];
+    }, z.array(z.string()))
+    .default([]),
   /** Concrete model that produced the record, for auditability. */
   model: z.string().optional(),
   /** Obsidian wikilink targets, for the knowledge graph. */

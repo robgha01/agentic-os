@@ -184,6 +184,8 @@ const synthesizeResearch: NativeHandler = async (ctx) => {
     const out = await ctx.services.llm.complete(prompt, { system, maxTokens: 1200 });
     if (out && out.trim()) {
       ctx.context.synthesis = out.trim();
+      // Record which brain produced the analysis, for the doc's provenance.
+      ctx.context.synthModel = `${ctx.services.llm.model} (${ctx.services.llm.id})`;
       ctx.emit(`synthesize-research: synthesized via ${ctx.services.llm.id} (${out.trim().length} chars)\n`);
     } else {
       ctx.emit(`synthesize-research: LLM (${ctx.services.llm.id}) returned empty; continuing without synthesis\n`);
@@ -231,6 +233,8 @@ const compileResearch: NativeHandler = async (ctx) => {
     ? { Analysis: synthesis, "Key findings": keyFindings }
     : { "Key findings": keyFindings };
 
+  const now = ctx.services.nowIso();
+  const dateKey = (now.split("T")[0] ?? now).slice(0, 10);
   const title = `${topic} — last 30 days`;
   const built = buildResultDocument({
     type: "research",
@@ -245,7 +249,11 @@ const compileResearch: NativeHandler = async (ctx) => {
     staleAfterMinutes: 1440,
     tags: [`topic/${topic.toLowerCase().replace(/\s+/g, "-")}`],
     inputs: { topic },
-    now: ctx.services.nowIso(),
+    // Provenance: which model synthesised the analysis (if any).
+    model: typeof ctx.context.synthModel === "string" ? ctx.context.synthModel : undefined,
+    // Backlink to the day's note so Obsidian's graph connects the node.
+    links: [dateKey],
+    now,
   });
 
   const path = ctx.services.vault.writeGenerated(built.frontmatter, built.generated);
@@ -307,6 +315,8 @@ const inboxTriage: NativeHandler = async (ctx) => {
     staleAfterMinutes: 60,
     tags: ["inbox", `mail/${mail.id}`],
     inputs: { provider: mail.id },
+    // Backlink to the day's note so Obsidian's graph connects the node.
+    links: [dateKey],
     now: ctx.services.nowIso(),
   });
 

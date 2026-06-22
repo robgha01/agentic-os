@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import type {
   ModelRuntimeContext,
   ModelSelection,
+  OperationResult,
   RoutedIntent,
   SkillManifest,
 } from "@aos/shared";
@@ -27,18 +28,21 @@ import { VaultAdapter } from "../memory/vault-adapter.js";
 
 export class Dispatcher {
   private runtimeExec: SkillRuntime;
+  private readonly vault: VaultAdapter;
 
   constructor(
     private router: Router,
     private readonly loader: SkillLoader,
     private readonly bus: EventBus,
     private runtime: ModelRuntimeContext,
+    vault?: VaultAdapter,
     runtimeExec?: SkillRuntime,
   ) {
+    this.vault = vault ?? new VaultAdapter();
     this.runtimeExec =
       runtimeExec ??
       new SkillRuntime(bus, loader, {
-        vault: new VaultAdapter(),
+        vault: this.vault,
         nowIso: () => new Date().toISOString(),
       });
   }
@@ -143,6 +147,24 @@ export class Dispatcher {
 
   /** Shared tail: model-selection cascade -> runtime, with event emission. */
   private async runSkill(skill: SkillManifest, intent: RoutedIntent, opId: string): Promise<void> {
+    // Check-exists-or-execute: if the skill declares a vault output and a fresh
+    // record already exists, serve it instead of re-running (unless force-set).
+    const force = intent.parameters.force === true;
+    if (!force) {
+      const hit = this.freshHit(skill, intent.parameters);
+      if (hit) {
+        this.startOp(opId, intent.actionId, skill.id, null);
+        this.bus.emit({
+          type: "notification",
+          at: now(),
+          level: "info",
+          message: `Using cached ${hit.result.type} "${hit.key}" (still fresh).`,
+        });
+        this.bus.emit({ type: "operation.completed", at: now(), opId, exitCode: 0, result: hit.result });
+        return;
+      }
+    }
+
     let selection: ModelSelection | null;
     try {
       selection = selectModel(skill.modelPolicy, this.runtime, {
@@ -161,6 +183,31 @@ export class Dispatcher {
     await this.runtimeExec.execute(skill, intent, selection, opId);
   }
 
+  /**
+   * If the skill declares what it `produces` and a fresh (non-stale, existing)
+   * record is on disk, return that record as an operation result; else null.
+   */
+  private freshHit(
+    skill: SkillManifest,
+    params: Record<string, unknown>,
+  ): { key: string; result: OperationResult } | null {
+    const p = skill.produces;
+    if (!p) return null;
+    const key = p.keyParam
+      ? String(params[p.keyParam] ?? "").trim()
+      : p.keyDate
+        ? dateKey(new Date().toISOString())
+        : "";
+    if (!key) return null;
+    const verdict = this.vault.needsRefresh(p.type, key);
+    if (!verdict.exists || verdict.stale) return null;
+    const rec = this.vault.read(p.type, key);
+    return {
+      key,
+      result: { path: this.vault.toRelative(verdict.path), title: rec?.frontmatter.title ?? key, type: p.type },
+    };
+  }
+
   private startOp(
     opId: string,
     actionId: string,
@@ -169,4 +216,9 @@ export class Dispatcher {
   ): void {
     this.bus.emit({ type: "operation.started", at: now(), op: { opId, actionId, skillId, selection } });
   }
+}
+
+/** YYYY-MM-DD from an ISO timestamp. */
+function dateKey(iso: string): string {
+  return (iso.split("T")[0] ?? iso).slice(0, 10);
 }

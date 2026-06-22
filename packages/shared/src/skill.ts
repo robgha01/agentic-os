@@ -13,6 +13,7 @@
  */
 import { z } from "zod";
 import { ModelPolicySchema } from "./models.js";
+import { DOCUMENT_TYPES } from "./vault.js";
 
 /** How a skill is executed once dispatched. */
 export const SkillExecutionSchema = z.discriminatedUnion("kind", [
@@ -93,6 +94,18 @@ export const SkillManifestSchema = z
     vaultOutput: z.string().optional(),
     /** Freshness window in minutes; the OS re-runs the skill if the vault record is older. */
     staleAfterMinutes: z.number().int().positive().optional(),
+    /**
+     * Declares the vault record this skill produces, so the dispatcher can serve
+     * a fresh existing record instead of re-running (check-exists-or-execute).
+     * The key comes from a param (`keyParam`) or today's date (`keyDate`).
+     */
+    produces: z
+      .object({
+        type: z.enum(DOCUMENT_TYPES),
+        keyParam: z.string().optional(),
+        keyDate: z.boolean().optional(),
+      })
+      .optional(),
   })
   .superRefine((m, ctx) => {
     if (m.surfaces.includes("deck") && !m.presentation) {

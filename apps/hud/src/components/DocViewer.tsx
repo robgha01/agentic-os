@@ -44,6 +44,15 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
         <header className="docviewer__head">
           <div className="docviewer__path">{path}</div>
           <div className="docviewer__actions">
+            {doc ? (
+              <button
+                className="docviewer__speak"
+                onClick={() => hud.send({ type: "speak", path })}
+                title="Read the summary aloud"
+              >
+                🔊 Speak
+              </button>
+            ) : null}
             {doc?.obsidianUri ? (
               <a className="docviewer__obsidian" href={doc.obsidianUri}>
                 Open in Obsidian ↗

@@ -18,7 +18,10 @@ export interface CompleteOptions {
 }
 
 export interface LlmService {
+  /** Transport id ("sdk" | "headless") — the engine that ran the completion. */
   readonly id: string;
+  /** Concrete model string, for record provenance. */
+  readonly model: string;
   complete(prompt: string, opts?: CompleteOptions): Promise<string>;
 }
 
@@ -26,7 +29,7 @@ export interface LlmService {
 class AnthropicSdkLlm implements LlmService {
   readonly id = "sdk";
   private readonly client: Anthropic;
-  constructor(private readonly model: string, apiKey?: string) {
+  constructor(public readonly model: string, apiKey?: string) {
     this.client = apiKey ? new Anthropic({ apiKey }) : new Anthropic();
   }
   async complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
@@ -48,7 +51,7 @@ class AnthropicSdkLlm implements LlmService {
 class ClaudeHeadlessLlm implements LlmService {
   readonly id = "headless";
   constructor(
-    private readonly model: string,
+    public readonly model: string,
     private readonly bin: string,
     private readonly timeoutMs = 120_000,
   ) {}
