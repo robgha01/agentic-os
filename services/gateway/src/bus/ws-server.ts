@@ -3,9 +3,11 @@
  * upgrade. Bus events are broadcast to every connected client (the HUD feed);
  * inbound `ClientCommand`s drive the dispatcher.
  */
+import { existsSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientCommand, OsEvent } from "@aos/shared";
+import { config } from "../../../../config/agentic-os.config.js";
 import type { Dispatcher } from "../dispatch/dispatcher.js";
 import type { SkillLoader } from "../skills/skill-loader.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
@@ -40,6 +42,24 @@ export class GatewayServer {
         // The HUD fetches this on load to build the command deck.
         case "/skills":
           return json(res, { skills: this.loader.deckCards() });
+        // Sanitized config + connection status for the Options view (no secrets).
+        case "/config":
+          return json(res, {
+            router: { defaultProvider: config.router.defaultProvider, transport: config.router.transport },
+            voice: { mode: config.voice.mode, stt: config.voice.stt.provider, tts: config.voice.tts.provider },
+            mail: {
+              provider: config.mail.provider,
+              tokenSource: config.mail.tokenSource,
+              signedIn: config.mail.provider === "outlook" && existsSync(config.mail.tokenStorePath),
+            },
+            research: {
+              sources: [
+                { id: "hackernews", label: "Hacker News", auth: "keyless" },
+                { id: "reddit", label: "Reddit", auth: "keyless (may rate-limit from some IPs)" },
+              ],
+            },
+            vault: { path: config.vault.path },
+          });
         // Recent vault records — the V.A.U.L.T. feed.
         case "/vault/recent":
           return json(res, { records: this.vault.listRecent(40) });

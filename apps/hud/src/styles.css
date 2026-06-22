@@ -32,11 +32,18 @@ body {
 
 a { color: var(--magenta); }
 
-/* ---- App grid ---- */
+/* ---- App shell ---- */
 .app {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dash {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-rows: 48px 1fr 56px;
+  grid-template-rows: 1fr 56px;
 }
 
 .stage {
@@ -56,7 +63,15 @@ a { color: var(--magenta); }
   background: rgba(16, 16, 25, 0.7);
   backdrop-filter: blur(6px);
 }
-.topbar__brand { display: flex; align-items: baseline; gap: 12px; }
+.topbar__brand { display: flex; align-items: center; gap: 16px; }
+.nav { display: flex; gap: 4px; }
+.nav__link {
+  background: none; border: none; cursor: pointer; font-family: var(--mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--mute);
+  padding: 5px 10px; border-radius: 5px;
+}
+.nav__link:hover { color: var(--ink); }
+.nav__link--active { color: var(--ink); background: color-mix(in srgb, var(--magenta) 16%, transparent); }
 .brand {
   font-family: var(--display);
   font-weight: 700;
@@ -285,6 +300,24 @@ a { color: var(--magenta); }
 .bar--active .bar__fill { animation: sweep 1.1s ease-in-out infinite; }
 @keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
 .cmdbar__count { font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--mute); white-space: nowrap; }
+
+/* ---- Options view ---- */
+.options { flex: 1; min-height: 0; overflow: auto; padding: 32px 40px; max-width: 760px; }
+.options__title { font-family: var(--display); font-weight: 700; font-size: 26px; margin: 0 0 6px; }
+.options__lead { color: var(--mute); margin: 0 0 24px; line-height: 1.5; }
+.opt { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 14px; background: var(--panel); }
+.opt__h { font-family: var(--display); font-size: 14px; margin: 0 0 12px; color: var(--ink); }
+.opt__row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.opt__key { color: var(--mute); font-size: 12px; }
+.opt__val { color: var(--ink); font-size: 12px; text-align: right; word-break: break-all; }
+.opt__hint { color: var(--mute); font-size: 11px; line-height: 1.6; margin: 12px 0 0; }
+.opt__hint code, .opt__row code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; color: var(--ink); }
+.opt__btn {
+  margin-top: 14px; background: color-mix(in srgb, var(--magenta) 16%, transparent);
+  border: 1px solid var(--magenta); color: var(--ink); font-family: var(--mono); font-size: 12px;
+  padding: 8px 14px; border-radius: 6px; cursor: pointer;
+}
+.opt__btn:hover { background: color-mix(in srgb, var(--magenta) 28%, transparent); }
 
 /* ---- Auth overlay ---- */
 .overlay {

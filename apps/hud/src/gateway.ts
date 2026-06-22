@@ -27,6 +27,15 @@ export interface VaultDoc {
   body: string;
 }
 
+/** Sanitized gateway configuration for the Options view. */
+export interface ConfigView {
+  router: { defaultProvider: string; transport: string };
+  voice: { mode: string; stt: string; tts: string };
+  mail: { provider: string; tokenSource: string; signedIn: boolean };
+  research: { sources: { id: string; label: string; auth: string }[] };
+  vault: { path: string };
+}
+
 export class GatewayClient {
   private ws?: WebSocket;
   private reconnectTimer?: number;
@@ -82,6 +91,11 @@ export class GatewayClient {
     const res = await fetch(`${HTTP_BASE}/vault/doc?path=${encodeURIComponent(path)}`);
     if (!res.ok) return null;
     return (await res.json()) as VaultDoc;
+  }
+
+  async fetchConfig(): Promise<ConfigView> {
+    const res = await fetch(`${HTTP_BASE}/config`);
+    return (await res.json()) as ConfigView;
   }
 
   dispose(): void {

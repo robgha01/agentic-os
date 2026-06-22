@@ -5,6 +5,12 @@
 import { useEffect, useState } from "react";
 import type { HudState } from "../useGateway.js";
 
+export type ViewId = "dashboard" | "options";
+const VIEWS: { id: ViewId; label: string }[] = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "options", label: "Options" },
+];
+
 function useClock(): string {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -14,12 +20,23 @@ function useClock(): string {
   return now.toLocaleTimeString([], { hour12: false });
 }
 
-export function TopBar({ hud }: { hud: HudState }) {
+export function TopBar({ hud, view, onNav }: { hud: HudState; view: ViewId; onNav: (v: ViewId) => void }) {
   const clock = useClock();
   return (
     <header className="topbar">
       <div className="topbar__brand">
         <span className="brand">V.A.U.L.T.</span>
+        <nav className="nav">
+          {VIEWS.map((v) => (
+            <button
+              key={v.id}
+              className={`nav__link ${view === v.id ? "nav__link--active" : ""}`}
+              onClick={() => onNav(v.id)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </nav>
         <span className={`status status--${hud.status}`}>{hud.status}</span>
       </div>
 

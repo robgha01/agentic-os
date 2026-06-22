@@ -8,7 +8,13 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand, OsEvent, SkillCard } from "@aos/shared";
-import { GatewayClient, type ConnectionStatus, type VaultDoc, type VaultSummary } from "./gateway.js";
+import {
+  GatewayClient,
+  type ConfigView,
+  type ConnectionStatus,
+  type VaultDoc,
+  type VaultSummary,
+} from "./gateway.js";
 
 export type CoreState = "idle" | "listening" | "thinking" | "speaking";
 
@@ -55,6 +61,7 @@ export interface HudState {
   openDoc: (path: string) => void;
   closeDoc: () => void;
   fetchDoc: (path: string) => Promise<VaultDoc | null>;
+  fetchConfig: () => Promise<ConfigView>;
 }
 
 const MAX_OPS = 60;
@@ -192,6 +199,10 @@ export function useGateway(): HudState {
     (path: string) => clientRef.current?.fetchDoc(path) ?? Promise.resolve(null),
     [],
   );
+  const fetchConfig = useCallback(
+    () => clientRef.current?.fetchConfig() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
 
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
@@ -220,5 +231,6 @@ export function useGateway(): HudState {
     openDoc,
     closeDoc,
     fetchDoc,
+    fetchConfig,
   };
 }
