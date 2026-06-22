@@ -26,13 +26,13 @@ import { SkillRuntime } from "../skills/skill-runtime.js";
 import { VaultAdapter } from "../memory/vault-adapter.js";
 
 export class Dispatcher {
-  private readonly runtimeExec: SkillRuntime;
+  private runtimeExec: SkillRuntime;
 
   constructor(
-    private readonly router: Router,
+    private router: Router,
     private readonly loader: SkillLoader,
     private readonly bus: EventBus,
-    private readonly runtime: ModelRuntimeContext,
+    private runtime: ModelRuntimeContext,
     runtimeExec?: SkillRuntime,
   ) {
     this.runtimeExec =
@@ -41,6 +41,13 @@ export class Dispatcher {
         vault: new VaultAdapter(),
         nowIso: () => new Date().toISOString(),
       });
+  }
+
+  /** Swap live pieces after a config change (no restart). */
+  reconfigure(opts: { router?: Router; runtime?: ModelRuntimeContext; runtimeExec?: SkillRuntime }): void {
+    if (opts.router) this.router = opts.router;
+    if (opts.runtime) this.runtime = opts.runtime;
+    if (opts.runtimeExec) this.runtimeExec = opts.runtimeExec;
   }
 
   /**

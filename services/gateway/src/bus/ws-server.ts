@@ -33,6 +33,7 @@ export class GatewayServer {
     private readonly loader: SkillLoader,
     private readonly vault: VaultAdapter,
     private readonly requestedPort: number,
+    private readonly onSettingsChange?: () => Promise<void>,
   ) {
     // Localhost single-user tool: allow the HUD (served from a dev/other port)
     // to read these GET endpoints cross-origin.
@@ -70,7 +71,10 @@ export class GatewayServer {
               if (wantSecret ? isSecretKey(k) : isEditableKey(k)) allowed[k] = v;
             }
             setValues(allowed);
-            json(res, { ok: true, saved: Object.keys(allowed), restartRequired: true });
+            void Promise.resolve(this.onSettingsChange?.()).then(
+              () => json(res, { ok: true, saved: Object.keys(allowed), applied: true }),
+              () => json(res, { ok: true, saved: Object.keys(allowed), applied: false }),
+            );
           } catch {
             json(res, { ok: false, error: "invalid JSON" }, 400);
           }

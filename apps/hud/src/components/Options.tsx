@@ -63,13 +63,11 @@ export function Options({ hud }: { hud: HudState }) {
     <div className="options">
       <h1 className="options__title">Options</h1>
       <p className="options__lead">
-        Edit non-secret settings here — they persist and apply on the next gateway
-        restart. Secrets aren't entered here (Outlook uses device-code sign-in).
+        Edit settings here — they persist to the config file and apply live (new
+        operations use them immediately). Env vars still override at runtime.
       </p>
 
-      {dirty ? (
-        <div className="opt__banner">Saved. Restart the gateway (<code>npm run start</code>) to apply.</div>
-      ) : null}
+      {dirty ? <div className="opt__banner">Saved &amp; applied live.</div> : null}
 
       <section className="opt">
         <h2 className="opt__h">Routing</h2>
@@ -120,7 +118,7 @@ export function Options({ hud }: { hud: HudState }) {
         <h2 className="opt__h">Secrets</h2>
         <p className="opt__hint">
           Stored via <strong>{cfg.secretBackend === "os-keychain" ? "your OS keychain" : "encrypted file"}</strong>;
-          never shown again or sent back. Env vars still override at runtime.
+          never shown again or sent back. Applied live on save.
         </p>
         <SecretField label="Anthropic API key" k="anthropic.apiKey" present={!!cfg.secrets["anthropic.apiKey"]} hud={hud} onSaved={() => setDirty(true)} />
         <SecretField label="Outlook static token" k="mail.token" present={!!cfg.secrets["mail.token"]} hud={hud} onSaved={() => setDirty(true)} />

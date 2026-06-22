@@ -14,9 +14,15 @@ import type { TtsProvider } from "./tts-provider.js";
 export class Speaker {
   constructor(
     private readonly bus: EventBus,
-    private readonly mode: "text" | "voice",
-    private readonly tts: TtsProvider,
+    private mode: "text" | "voice",
+    private tts: TtsProvider,
   ) {}
+
+  /** Apply a config change in place (no restart). */
+  reconfigure(mode: "text" | "voice", tts: TtsProvider): void {
+    this.mode = mode;
+    this.tts = tts;
+  }
 
   async say(text: string): Promise<void> {
     if (this.mode === "voice") {

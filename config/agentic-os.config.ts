@@ -78,10 +78,10 @@ export interface AgenticOsConfig {
   };
 }
 
-const voicePort = cfgNum("ports.voice", "AGENTIC_OS_VOICE_PORT", 7788);
-const mailTokenEnvName = cfg("mail.tokenEnv", "AGENTIC_OS_MAIL_TOKEN_ENV", "AGENTIC_OS_MAIL_TOKEN");
-
-export const config: AgenticOsConfig = {
+function build(): AgenticOsConfig {
+  const voicePort = cfgNum("ports.voice", "AGENTIC_OS_VOICE_PORT", 7788);
+  const mailTokenEnvName = cfg("mail.tokenEnv", "AGENTIC_OS_MAIL_TOKEN_ENV", "AGENTIC_OS_MAIL_TOKEN");
+  return {
   router: {
     defaultProvider: oneOf(
       cfg("router.defaultProvider", "AGENTIC_OS_ROUTER", "haiku") === "ollama"
@@ -156,5 +156,18 @@ export const config: AgenticOsConfig = {
     scopes: cfg("mail.scopes", "AGENTIC_OS_MAIL_SCOPES", "https://graph.microsoft.com/Mail.Read offline_access"),
     tokenStorePath: cfg("mail.tokenStorePath", "AGENTIC_OS_MAIL_TOKEN_STORE", join(homedir(), ".agentic-os", "mail-token.json")),
     graphBaseUrl: cfg("mail.graphBaseUrl", "AGENTIC_OS_GRAPH_BASE_URL", "https://graph.microsoft.com/v1.0"),
-  },
-};
+    },
+  };
+}
+
+/** The live config. Mutated in place by reloadConfig() so holders see updates. */
+export const config: AgenticOsConfig = build();
+
+/**
+ * Re-resolve config from the store + env and apply it in place. Call after the
+ * config file changes (Options panel save) so live services can rebuild from
+ * the current values without a restart.
+ */
+export function reloadConfig(): void {
+  Object.assign(config, build());
+}
