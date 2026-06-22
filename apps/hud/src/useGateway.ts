@@ -62,6 +62,7 @@ export interface HudState {
   closeDoc: () => void;
   fetchDoc: (path: string) => Promise<VaultDoc | null>;
   fetchConfig: () => Promise<ConfigView>;
+  saveSettings: (partial: Record<string, string>) => Promise<void>;
 }
 
 const MAX_OPS = 60;
@@ -203,6 +204,10 @@ export function useGateway(): HudState {
     () => clientRef.current?.fetchConfig() ?? Promise.reject(new Error("not connected")),
     [],
   );
+  const saveSettings = useCallback(
+    (partial: Record<string, string>) => clientRef.current?.saveSettings(partial) ?? Promise.resolve(),
+    [],
+  );
 
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
@@ -232,5 +237,6 @@ export function useGateway(): HudState {
     closeDoc,
     fetchDoc,
     fetchConfig,
+    saveSettings,
   };
 }

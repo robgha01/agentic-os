@@ -34,6 +34,8 @@ export interface ConfigView {
   mail: { provider: string; tokenSource: string; signedIn: boolean };
   research: { sources: { id: string; label: string; auth: string }[] };
   vault: { path: string };
+  /** Last-saved settings overlay (may differ from running until restart). */
+  saved: Record<string, string>;
 }
 
 export class GatewayClient {
@@ -96,6 +98,14 @@ export class GatewayClient {
   async fetchConfig(): Promise<ConfigView> {
     const res = await fetch(`${HTTP_BASE}/config`);
     return (await res.json()) as ConfigView;
+  }
+
+  async saveSettings(partial: Record<string, string>): Promise<void> {
+    await fetch(`${HTTP_BASE}/settings`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(partial),
+    });
   }
 
   dispose(): void {

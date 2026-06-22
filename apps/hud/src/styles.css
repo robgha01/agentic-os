@@ -310,6 +310,16 @@ a { color: var(--magenta); }
 .opt__row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
 .opt__key { color: var(--mute); font-size: 12px; }
 .opt__val { color: var(--ink); font-size: 12px; text-align: right; word-break: break-all; }
+.opt__select {
+  background: var(--void); border: 1px solid var(--line); color: var(--ink);
+  font-family: var(--mono); font-size: 12px; padding: 5px 8px; border-radius: 5px; min-width: 160px;
+}
+.opt__select:focus { outline: none; border-color: var(--magenta); }
+.opt__banner {
+  border: 1px solid color-mix(in srgb, var(--cyan) 50%, var(--line));
+  background: color-mix(in srgb, var(--cyan) 10%, transparent);
+  color: var(--ink); font-size: 12px; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px;
+}
 .opt__hint { color: var(--mute); font-size: 11px; line-height: 1.6; margin: 12px 0 0; }
 .opt__hint code, .opt__row code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; color: var(--ink); }
 .opt__btn {

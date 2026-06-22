@@ -10,6 +10,13 @@
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { setting, type EditableKey } from "./settings.js";
+
+/** Persisted setting (Options panel) wins; falls back to the env-derived value. */
+function pick<T extends string>(key: EditableKey, fallback: T, allowed: readonly T[]): T {
+  const v = setting(key);
+  return v !== undefined && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+}
 
 // Repo root resolved from this file's location (<root>/config/agentic-os.config.ts),
 // so the vault lands in <root>/vault regardless of which package's CWD started us.
@@ -131,8 +138,16 @@ const voicePort = envNum("AGENTIC_OS_VOICE_PORT", 7788);
 
 export const config: AgenticOsConfig = {
   router: {
-    defaultProvider: env("AGENTIC_OS_ROUTER", "haiku") === "ollama" ? "llama3" : "haiku",
-    transport: env("AGENTIC_OS_ROUTER_TRANSPORT", "sdk") === "headless" ? "headless" : "sdk",
+    defaultProvider: pick(
+      "router.defaultProvider",
+      env("AGENTIC_OS_ROUTER", "haiku") === "ollama" ? "llama3" : "haiku",
+      ["haiku", "llama3"],
+    ),
+    transport: pick(
+      "router.transport",
+      env("AGENTIC_OS_ROUTER_TRANSPORT", "sdk") === "headless" ? "headless" : "sdk",
+      ["sdk", "headless"],
+    ),
     minConfidence: envNum("AGENTIC_OS_ROUTER_MIN_CONFIDENCE", 0.4),
   },
   claudeCode: {
@@ -160,28 +175,36 @@ export const config: AgenticOsConfig = {
     defaultMaxCostUsd: envNum("AGENTIC_OS_MAX_COST_USD", 0.05),
   },
   voice: {
-    mode: env("AGENTIC_OS_VOICE_MODE", "text") === "voice" ? "voice" : "text",
+    mode: pick("voice.mode", env("AGENTIC_OS_VOICE_MODE", "text") === "voice" ? "voice" : "text", ["text", "voice"]),
     stt: {
-      provider: env("AGENTIC_OS_STT_PROVIDER", "faster-whisper"),
+      provider: setting("voice.stt.provider") ?? env("AGENTIC_OS_STT_PROVIDER", "faster-whisper"),
       model: envOpt("AGENTIC_OS_STT_MODEL"),
       apiKeyEnv: envOpt("AGENTIC_OS_STT_API_KEY_ENV"),
     },
     tts: {
-      provider: env("AGENTIC_OS_TTS_PROVIDER", "kokoro"),
+      provider: setting("voice.tts.provider") ?? env("AGENTIC_OS_TTS_PROVIDER", "kokoro"),
       voice: envOpt("AGENTIC_OS_TTS_VOICE"),
       apiKeyEnv: envOpt("AGENTIC_OS_TTS_API_KEY_ENV"),
     },
     sidecarUrl: env("AGENTIC_OS_VOICE_SIDECAR_URL", `http://localhost:${voicePort}`),
   },
   mail: {
-    provider: ((): "none" | "outlook" | "gmail" | "imap" => {
-      const p = env("AGENTIC_OS_MAIL_PROVIDER", "none");
-      return p === "outlook" || p === "gmail" || p === "imap" ? p : "none";
-    })(),
-    tokenSource: ((): "device-code" | "command" | "env" => {
-      const s = env("AGENTIC_OS_MAIL_TOKEN_SOURCE", "device-code");
-      return s === "command" || s === "env" ? s : "device-code";
-    })(),
+    provider: pick(
+      "mail.provider",
+      ((): "none" | "outlook" | "gmail" | "imap" => {
+        const p = env("AGENTIC_OS_MAIL_PROVIDER", "none");
+        return p === "outlook" || p === "gmail" || p === "imap" ? p : "none";
+      })(),
+      ["none", "outlook", "gmail", "imap"],
+    ),
+    tokenSource: pick(
+      "mail.tokenSource",
+      ((): "device-code" | "command" | "env" => {
+        const s = env("AGENTIC_OS_MAIL_TOKEN_SOURCE", "device-code");
+        return s === "command" || s === "env" ? s : "device-code";
+      })(),
+      ["device-code", "command", "env"],
+    ),
     tokenEnv: env("AGENTIC_OS_MAIL_TOKEN_ENV", "AGENTIC_OS_MAIL_TOKEN"),
     tokenCommand: env(
       "AGENTIC_OS_MAIL_TOKEN_COMMAND",

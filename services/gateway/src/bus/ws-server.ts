@@ -8,6 +8,7 @@ import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientCommand, OsEvent } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
+import { settingsAll, writeSettings } from "../../../../config/settings.js";
 import type { Dispatcher } from "../dispatch/dispatcher.js";
 import type { SkillLoader } from "../skills/skill-loader.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
@@ -36,6 +37,32 @@ export class GatewayServer {
 
     this.http = createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
+
+      // CORS preflight for the POST below.
+      if (req.method === "OPTIONS") {
+        res.writeHead(204, {
+          ...cors,
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-headers": "content-type",
+        });
+        return res.end();
+      }
+
+      // Persist edited settings from the Options panel (applies on restart).
+      if (req.method === "POST" && url.pathname === "/settings") {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          try {
+            const saved = writeSettings(JSON.parse(body || "{}") as Record<string, unknown>);
+            json(res, { ok: true, saved, restartRequired: true });
+          } catch {
+            json(res, { ok: false, error: "invalid JSON" }, 400);
+          }
+        });
+        return;
+      }
+
       switch (url.pathname) {
         case "/health":
           return json(res, { status: "ok", clients: this.wss.clients.size });
@@ -59,6 +86,9 @@ export class GatewayServer {
               ],
             },
             vault: { path: config.vault.path },
+            // Saved overlay (what the Options panel last wrote) — may differ from
+            // the running values above until the gateway restarts.
+            saved: settingsAll(),
           });
         // Recent vault records — the V.A.U.L.T. feed.
         case "/vault/recent":
