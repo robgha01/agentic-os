@@ -40,3 +40,14 @@ build/
 # Agentic OS task scratch + coordination state (ephemeral)
 .agentic-os/tasks/
 .agentic-os/state/
+
+# Vault: generated records are user data, not source. Keep only the structural
+# seeds (conventions, schema, templates, maps) under version control.
+vault/**
+!vault/.gitkeep
+!vault/_meta/
+!vault/_meta/**
+!vault/_templates/
+!vault/_templates/**
+!vault/90-maps/
+!vault/90-maps/**

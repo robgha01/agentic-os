@@ -13,6 +13,7 @@
     "typecheck": "npm run typecheck -w @aos/gateway",
     "start": "npm run start -w @aos/gateway",
     "route-demo": "npm run route-demo -w @aos/gateway",
-    "runtime-demo": "npm run runtime-demo -w @aos/gateway"
+    "runtime-demo": "npm run runtime-demo -w @aos/gateway",
+    "vault-demo": "npm run vault-demo -w @aos/gateway"
   }
 }

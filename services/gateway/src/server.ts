@@ -13,12 +13,18 @@ import { Dispatcher } from "./dispatch/dispatcher.js";
 import { Router } from "./routing/router.js";
 import { detectRuntime } from "./runtime.js";
 import { SkillLoader } from "./skills/skill-loader.js";
+import { VaultAdapter } from "./memory/vault-adapter.js";
+import { VaultRecorder } from "./memory/vault-recorder.js";
 
 async function main(): Promise<void> {
   const runtime = await detectRuntime();
 
   const bus = new EventBus();
   new AuditLogger(bus);
+
+  // Persist every operation to the vault's daily Operations log (V.A.U.L.T. feed).
+  const vault = new VaultAdapter();
+  new VaultRecorder(bus, vault);
 
   const loader = new SkillLoader();
   const skillCount = loader.load();

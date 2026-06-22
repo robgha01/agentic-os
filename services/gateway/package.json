@@ -8,11 +8,13 @@
     "typecheck": "tsc --noEmit",
     "start": "tsx src/server.ts",
     "route-demo": "tsx scripts/route-demo.ts",
-    "runtime-demo": "tsx scripts/runtime-demo.ts"
+    "runtime-demo": "tsx scripts/runtime-demo.ts",
+    "vault-demo": "tsx scripts/vault-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
     "@aos/shared": "*",
+    "gray-matter": "^4.0.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {
