@@ -18,7 +18,7 @@
   },
   "execution": {
     "kind": "composite",
-    "steps": ["fetch-hackernews", "fetch-reddit", "compile-research"]
+    "steps": ["fetch-hackernews", "fetch-reddit", "synthesize-research", "compile-research"]
   },
   "vaultOutput": "10-research/{{topic}}.md",
   "staleAfterMinutes": 1440

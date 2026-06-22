@@ -42,10 +42,25 @@ async function main(): Promise<void> {
       { label: "Hacker News search: rust async", url: "https://hn.algolia.com/?query=rust%20async&dateRange=pastMonth&type=story" },
     ],
   };
+  // Stub LLM so synthesis is deterministic + offline.
+  const stubLlm = {
+    id: "stub",
+    async complete() {
+      return "## Signal\nStubbed grounded summary of rust async [1].\n## Rising\n- Runtime consolidation [1]\n## Friction\n- Not evident in the last 30 days of items.";
+    },
+  };
+  const synthCtx: Record<string, unknown> = { ...seeded };
+  await NATIVE_HANDLERS.synthesizeResearch!({
+    intent: intentFor("rust async"),
+    params: { topic: "rust async" },
+    context: synthCtx,
+    services: { ...services, llm: stubLlm },
+    emit: (c) => process.stdout.write(`  ${c}`),
+  });
   const code = await NATIVE_HANDLERS.compileResearch!({
     intent: intentFor("rust async"),
     params: { topic: "rust async" },
-    context: { ...seeded },
+    context: synthCtx,
     services,
     emit: (c) => process.stdout.write(`  ${c}`),
   });
@@ -53,6 +68,7 @@ async function main(): Promise<void> {
   console.log("handler exit   :", code);
   console.log("status         :", recA?.frontmatter.status, "| confidence:", recA?.frontmatter.confidence);
   console.log("has TL;DR      :", recA?.generated.includes("**TL;DR**"));
+  console.log("has Analysis   :", recA?.generated.includes("## Analysis"), "(synthesis embedded)");
   console.log("findings bullets:", (recA?.generated.match(/^- /gm) ?? []).length);
 
   // B) Full composite through the runtime (live HN best-effort, offline-safe).

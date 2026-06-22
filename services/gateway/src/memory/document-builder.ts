@@ -74,10 +74,9 @@ export function buildResultDocument(input: ResultDocumentInput): BuiltDocument {
   const parts: string[] = [`# ${input.title}`];
   if (nonEmpty(input.tldr)) parts.push(`> **TL;DR** — ${input.tldr!.trim()}`);
 
-  const ordered = [
-    ...contract.requiredSections,
-    ...Object.keys(input.sections).filter((k) => !contract.requiredSections.includes(k)),
-  ];
+  // Render sections in the order the caller provided them (required ones are
+  // validated above to exist), so a lead "Analysis" section can come first.
+  const ordered = Object.keys(input.sections);
   for (const heading of ordered) {
     const content = input.sections[heading];
     if (!nonEmpty(content)) continue;

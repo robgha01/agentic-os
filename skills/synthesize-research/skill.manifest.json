@@ -1,0 +1,15 @@
+{
+  "id": "synthesize-research",
+  "name": "Synthesize Research",
+  "description": "Sub-skill: turns the gathered items on the shared research context into a grounded, high-contrast analysis (Signal / Rising / Friction) using the configured LLM (claude -p or the Anthropic SDK). Degrades gracefully if no LLM is available.",
+  "triggers": ["synthesize-research"],
+  "surfaces": [],
+  "modelPolicy": {
+    "execTier": "heavy",
+    "privacy": "cloud-ok"
+  },
+  "execution": {
+    "kind": "native",
+    "handler": "synthesizeResearch"
+  }
+}

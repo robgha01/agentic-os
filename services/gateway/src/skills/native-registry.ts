@@ -12,6 +12,7 @@
 import type { RoutedIntent } from "@aos/shared";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
 import type { MailProvider } from "../mail/mail-provider.js";
+import type { LlmService } from "../llm/llm-service.js";
 import { buildResultDocument, type SourceRef } from "../memory/document-builder.js";
 
 /** Services the gateway injects into every native handler. */
@@ -21,6 +22,8 @@ export interface SkillServices {
   nowIso: () => string;
   /** Configured mail backend; undefined when mail is disabled. */
   mail?: MailProvider;
+  /** LLM completion (synthesis); undefined when no transport is usable. */
+  llm?: LlmService;
 }
 
 export interface NativeHandlerContext {
@@ -138,6 +141,60 @@ const fetchReddit: NativeHandler = async (ctx) => {
   return 0;
 };
 
+// --- Synthesis (grounded, LLM) ---------------------------------------------
+
+const synthesizeResearch: NativeHandler = async (ctx) => {
+  const topic = String(ctx.params.topic ?? "").trim();
+  const items = (ctx.context.researchItems as ResearchItem[] | undefined) ?? [];
+
+  if (!ctx.services.llm) {
+    ctx.emit("synthesize-research: no LLM transport configured; skipping synthesis\n");
+    return 0;
+  }
+  if (items.length === 0) {
+    ctx.emit("synthesize-research: no items to synthesize\n");
+    return 0;
+  }
+
+  // Dedupe + rank, then number items so the model can cite them by [n].
+  const byUrl = new Map<string, ResearchItem>();
+  for (const it of items) if (!byUrl.has(it.url) || byUrl.get(it.url)!.score < it.score) byUrl.set(it.url, it);
+  const ranked = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 25);
+  const corpus = ranked
+    .map((it, i) => `[${i + 1}] (${it.source}, score ${it.score}) ${it.title} — ${it.url}`)
+    .join("\n");
+
+  const system =
+    "You synthesize community signal into a grounded brief. Use ONLY the provided items — do not add outside or prior knowledge. Cite every claim with its [n] index. If the items are thin or off-topic for the requested topic, say so plainly. Be concise and high-contrast.";
+  const prompt = [
+    `Topic: ${topic}`,
+    `Window: last 30 days`,
+    `Items:`,
+    corpus,
+    ``,
+    `Write GitHub-flavored markdown with exactly these sections:`,
+    `## Signal`,
+    `2–4 sentences: what the community is actually discussing about "${topic}" right now, grounded in the items.`,
+    `## Rising`,
+    `Bullets for what's gaining traction — each citing [n].`,
+    `## Friction`,
+    `Bullets for criticism / failures / losing traction — each citing [n]. If none appear in the items, write: "Not evident in the last 30 days of items."`,
+    ``,
+    `Every claim must trace to an item. Do not invent sources.`,
+  ].join("\n");
+
+  try {
+    const out = await ctx.services.llm.complete(prompt, { system, maxTokens: 1200 });
+    if (out) {
+      ctx.context.synthesis = out;
+      ctx.emit(`synthesize-research: synthesized via ${ctx.services.llm.id}\n`);
+    }
+  } catch (err) {
+    ctx.emit(`synthesize-research: failed (${(err as Error).message}); continuing without synthesis\n`);
+  }
+  return 0;
+};
+
 // --- Compile -> vault record ------------------------------------------------
 
 const compileResearch: NativeHandler = async (ctx) => {
@@ -169,13 +226,19 @@ const compileResearch: NativeHandler = async (ctx) => {
     ...searchSources,
   ];
 
+  // Lead with the grounded synthesis when available, then the raw findings.
+  const synthesis = typeof ctx.context.synthesis === "string" ? ctx.context.synthesis.trim() : "";
+  const sections: Record<string, string> = synthesis
+    ? { Analysis: synthesis, "Key findings": keyFindings }
+    : { "Key findings": keyFindings };
+
   const built = buildResultDocument({
     type: "research",
     key: topic,
     title: `${topic} — last 30 days`,
     source: "last-30-days",
     tldr,
-    sections: { "Key findings": keyFindings },
+    sections,
     sources,
     status: items.length > 0 ? "complete" : "partial",
     confidence: items.length >= 5 && sourcesUsed.length > 1 ? "high" : items.length >= 3 ? "medium" : "low",
@@ -253,6 +316,7 @@ const inboxTriage: NativeHandler = async (ctx) => {
 export const NATIVE_HANDLERS: Record<string, NativeHandler> = {
   fetchHackerNews,
   fetchReddit,
+  synthesizeResearch,
   compileResearch,
   inboxTriage,
 };

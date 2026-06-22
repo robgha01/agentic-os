@@ -19,6 +19,7 @@ import { VaultRecorder } from "./memory/vault-recorder.js";
 import { Speaker, SpeechBridge } from "./voice/speaker.js";
 import { createTtsProvider } from "./voice/tts-provider.js";
 import { createMailProvider, type MailProvider } from "./mail/mail-provider.js";
+import { createLlmService } from "./llm/llm-service.js";
 
 async function main(): Promise<void> {
   const runtime = await detectRuntime();
@@ -68,11 +69,15 @@ async function main(): Promise<void> {
     console.warn(`[gateway] mail disabled: ${(err as Error).message}`);
   }
 
+  // LLM for synthesis skills (claude -p or SDK per transport; undefined if neither).
+  const llm = createLlmService();
+
   // Share one vault + skill runtime so skills and the recorder write the same tree.
   const skillRuntime = new SkillRuntime(bus, loader, {
     vault,
     nowIso: () => new Date().toISOString(),
     mail,
+    llm,
   });
   const dispatcher = new Dispatcher(router, loader, bus, runtime, skillRuntime);
 
@@ -84,6 +89,7 @@ async function main(): Promise<void> {
   console.log(`[gateway] runtime:`, runtime);
   console.log(`[gateway] voice: mode=${config.voice.mode}` + (config.voice.mode === "voice" ? ` tts=${config.voice.tts.provider} sidecar=${config.voice.sidecarUrl}` : ""));
   console.log(`[gateway] mail: ${mail ? mail.id : "disabled"}`);
+  console.log(`[gateway] synthesis llm: ${llm ? llm.id : "disabled (set ANTHROPIC_API_KEY or transport=headless)"}`);
 
   const shutdown = async (): Promise<void> => {
     console.log("\n[gateway] shutting down…");
