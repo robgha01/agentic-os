@@ -165,7 +165,10 @@ a { color: var(--magenta); }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; min-height: 0; padding: 16px;
 }
-.core { position: relative; width: min(46vh, 420px); aspect-ratio: 1; }
+/* The ball lives in its own sized box; cards + connectors anchor to this box,
+   so they stay relative to the sphere regardless of the surrounding layout. */
+.core-stage { position: relative; width: min(46vh, 420px); aspect-ratio: 1; flex: none; }
+.core { position: relative; width: 100%; height: 100%; }
 .core__canvas { width: 100%; height: 100%; display: block; }
 .core__halo {
   position: absolute; inset: 12%;
@@ -190,20 +193,21 @@ a { color: var(--magenta); }
 .orbit__links line { stroke: var(--violet); stroke-width: 1; opacity: 0.5; }
 .orbit__links circle { fill: var(--magenta); opacity: 0.85; }
 .orbit__clear {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
   font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em;
   color: var(--mute); background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: 999px; padding: 4px 12px; cursor: pointer;
+  border-radius: 999px; padding: 4px 12px; cursor: pointer; white-space: nowrap;
 }
 .orbit__clear:hover { color: var(--ink); border-color: var(--magenta); }
 .ccard {
   position: absolute; display: flex; align-items: flex-start; gap: 4px; z-index: 3;
   animation: ccard-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-.ccard--tl { top: 14%; left: 6%; }
-.ccard--tr { top: 14%; right: 6%; flex-direction: row-reverse; }
-.ccard--bl { bottom: 18%; left: 6%; }
-.ccard--br { bottom: 18%; right: 6%; flex-direction: row-reverse; }
+/* Anchored to the ball box corners, nudged outward into the corner gaps. */
+.ccard--tl { top: -4%; right: 86%; }
+.ccard--tr { top: -4%; left: 86%; flex-direction: row-reverse; }
+.ccard--bl { bottom: -4%; right: 86%; }
+.ccard--br { bottom: -4%; left: 86%; flex-direction: row-reverse; }
 @keyframes ccard-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
 .ccard__body {
   position: relative; min-width: 150px; max-width: 210px; text-align: left; cursor: pointer;

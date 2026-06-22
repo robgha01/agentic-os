@@ -45,8 +45,10 @@ export function App() {
             <Panel side="left" slots={["left-top", "left-mid", "left-bottom"]} layout={layout} hud={hud} onMove={onMove} />
 
             <section className="center">
-              <ContextCards hud={hud} />
-              <Core state={hud.coreState} />
+              <div className="core-stage">
+                <Core state={hud.coreState} />
+                <ContextCards hud={hud} />
+              </div>
               <div className="center__state">{CORE_LABEL[hud.coreState]}</div>
               <div className="center__count">{hud.signals.toLocaleString()}</div>
               <div className="center__count-label">signals processed</div>

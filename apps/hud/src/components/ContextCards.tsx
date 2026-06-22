@@ -49,7 +49,9 @@ export function ContextCards({ hud }: { hud: HudState }) {
     const c = core.getBoundingClientRect();
     const cx = c.left + c.width / 2 - o.left;
     const cy = c.top + c.height / 2 - o.top;
-    const radius = (Math.min(c.width, c.height) / 2) * 0.9; // sphere surface
+    // The particle sphere's drawn radius is min(w,h)*0.32 (see Core.tsx), i.e.
+    // 0.64 of the half-box — match it so the line lands on the visible edge.
+    const radius = (Math.min(c.width, c.height) / 2) * 0.64; // sphere surface
     const next: Link[] = [];
     for (const card of cards) {
       const el = cardRefs.current.get(card.id);
