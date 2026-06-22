@@ -3,7 +3,7 @@
  * on each side) each hold one widget (or nothing). A default layout ships; the
  * user's arrangement persists to localStorage.
  */
-export type WidgetId = "vitals" | "operations" | "deck" | "vault" | "schedule";
+export type WidgetId = "vitals" | "operations" | "deck" | "vault" | "schedule" | "audio";
 
 export type SlotId =
   | "left-top"
@@ -23,18 +23,20 @@ export const WIDGET_TITLES: Record<WidgetId, string> = {
   deck: "Command deck",
   vault: "V.A.U.L.T. feed",
   schedule: "Schedule",
+  audio: "Audio I/O",
 };
 
 export const DEFAULT_LAYOUT: Layout = {
   "left-top": "vitals",
   "left-mid": "operations",
-  "left-bottom": null,
+  "left-bottom": "audio",
   "right-top": "deck",
   "right-mid": "vault",
   "right-bottom": "schedule",
 };
 
-const STORAGE_KEY = "aos.hud.layout.v1";
+// v2: added the Audio I/O widget to the default layout.
+const STORAGE_KEY = "aos.hud.layout.v2";
 
 export function loadLayout(): Layout {
   try {

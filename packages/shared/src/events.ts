@@ -42,7 +42,7 @@ export type OsEvent =
     }
   | { type: "operation.completed"; at: string; opId: string; exitCode: number | null; result?: OperationResult }
   | { type: "operation.failed"; at: string; opId: string; error: string }
-  | { type: "notification"; at: string; level: "info" | "warn" | "error"; message: string }
+  | { type: "notification"; at: string; level: "info" | "warn" | "error"; message: string; speak?: boolean }
   | { type: "metric"; at: string; name: string; value: number }
   /**
    * The OS "saying" something to the user. `text` is always present (the

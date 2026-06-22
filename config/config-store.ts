@@ -34,6 +34,7 @@ export const EDITABLE_KEYS = [
   "router.defaultProvider",
   "router.transport",
   "voice.mode",
+  "voice.announce",
   "voice.tts.provider",
   "voice.stt.provider",
   "mail.provider",

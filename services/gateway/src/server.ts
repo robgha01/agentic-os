@@ -72,7 +72,8 @@ async function main(): Promise<void> {
   // blockquote) aloud — the Jarvis-style "here's what I just did". Gated on
   // voice mode so text mode stays quiet; config is re-read live via applyConfig.
   bus.subscribe((e) => {
-    if (e.type !== "operation.completed" || !e.result || config.voice.mode !== "voice") return;
+    if (e.type !== "operation.completed" || !e.result) return;
+    if (config.voice.mode !== "voice" || !config.voice.announce) return;
     const doc = vault.readByPath(e.result.path);
     const core = doc ? extractSpokenCore(doc.body) : "";
     void speaker.say(core || `${e.result.title} ready.`);

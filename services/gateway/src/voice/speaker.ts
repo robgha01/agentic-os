@@ -54,7 +54,9 @@ export class Speaker {
 export class SpeechBridge {
   constructor(bus: EventBus, speaker: Speaker) {
     bus.subscribe((e: OsEvent) => {
-      if (e.type === "notification" && e.level !== "error") {
+      // Speak user-facing notices, unless one opts out (speak: false) — e.g. the
+      // "served from cache" notice, which the result auto-announce already covers.
+      if (e.type === "notification" && e.level !== "error" && e.speak !== false) {
         void speaker.say(e.message);
       }
     });

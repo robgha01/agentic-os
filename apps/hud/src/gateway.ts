@@ -33,7 +33,7 @@ export interface VaultDoc {
 /** Sanitized gateway configuration for the Options view. */
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
-  voice: { mode: string; stt: string; tts: string };
+  voice: { mode: string; announce: boolean; stt: string; tts: string };
   mail: { provider: string; tokenSource: string; signedIn: boolean };
   research: { sources: { id: string; label: string; auth: string }[] };
   vault: { path: string };

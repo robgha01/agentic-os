@@ -58,6 +58,8 @@ export interface AgenticOsConfig {
   budgets: { defaultMaxLatencyMs: number; defaultMaxCostUsd: number };
   voice: {
     mode: "text" | "voice";
+    /** Auto-announce finished tasks aloud (voice mode only). */
+    announce: boolean;
     stt: { provider: string; model?: string; apiKeyEnv?: string };
     tts: { provider: string; voice?: string; apiKeyEnv?: string };
     sidecarUrl: string;
@@ -120,6 +122,7 @@ function build(): AgenticOsConfig {
   },
   voice: {
     mode: oneOf(cfg("voice.mode", "AGENTIC_OS_VOICE_MODE", "text"), ["text", "voice"], "text"),
+    announce: cfg("voice.announce", "AGENTIC_OS_VOICE_ANNOUNCE", "true") !== "false",
     stt: {
       provider: cfg("voice.stt.provider", "AGENTIC_OS_STT_PROVIDER", "faster-whisper"),
       model: cfgOpt("voice.stt.model", "AGENTIC_OS_STT_MODEL"),

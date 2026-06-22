@@ -95,7 +95,12 @@ export class GatewayServer {
         case "/config":
           return json(res, {
             router: { defaultProvider: config.router.defaultProvider, transport: config.router.transport },
-            voice: { mode: config.voice.mode, stt: config.voice.stt.provider, tts: config.voice.tts.provider },
+            voice: {
+              mode: config.voice.mode,
+              announce: config.voice.announce,
+              stt: config.voice.stt.provider,
+              tts: config.voice.tts.provider,
+            },
             mail: {
               provider: config.mail.provider,
               tokenSource: config.mail.tokenSource,

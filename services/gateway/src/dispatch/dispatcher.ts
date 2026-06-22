@@ -159,6 +159,7 @@ export class Dispatcher {
           at: now(),
           level: "info",
           message: `Using cached ${hit.result.type} "${hit.key}" (still fresh).`,
+          speak: false, // visible in the HUD, but the result auto-announce covers it aloud
         });
         this.bus.emit({ type: "operation.completed", at: now(), opId, exitCode: 0, result: hit.result });
         return;
