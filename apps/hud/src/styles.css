@@ -183,6 +183,38 @@ a { color: var(--magenta); }
   color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1;
 }
 .center__count-label { text-transform: uppercase; letter-spacing: 0.28em; font-size: 9px; color: var(--mute); }
+/* ---- Floating context cards (corner panels around the core) ---- */
+.cards__clear {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 3;
+  font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em;
+  color: var(--mute); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px; cursor: pointer;
+}
+.cards__clear:hover { color: var(--ink); border-color: var(--magenta); }
+.ccard { position: absolute; display: flex; align-items: flex-start; gap: 4px; z-index: 3; }
+.ccard--tl { top: 12%; left: 4%; }
+.ccard--tr { top: 12%; right: 4%; flex-direction: row-reverse; }
+.ccard--bl { bottom: 18%; left: 4%; }
+.ccard--br { bottom: 18%; right: 4%; flex-direction: row-reverse; }
+.ccard__body {
+  position: relative; min-width: 148px; max-width: 200px; text-align: left; cursor: pointer;
+  background: color-mix(in srgb, var(--panel-2) 82%, transparent); border: 1px solid var(--line);
+  border-radius: 7px; padding: 9px 12px; backdrop-filter: blur(3px);
+}
+.ccard--tr .ccard__body, .ccard--br .ccard__body { text-align: right; }
+.ccard__body:hover { border-color: var(--magenta); box-shadow: 0 0 18px rgba(255, 61, 154, 0.18); }
+/* connector dot + stub line toward the core */
+.ccard__body::after {
+  content: ""; position: absolute; top: 50%; width: 28px; height: 1px;
+  background: linear-gradient(90deg, var(--line), transparent);
+}
+.ccard--tl .ccard__body::after, .ccard--bl .ccard__body::after { right: -28px; background: linear-gradient(90deg, var(--violet), transparent); }
+.ccard--tr .ccard__body::after, .ccard--br .ccard__body::after { left: -28px; background: linear-gradient(270deg, var(--violet), transparent); }
+.ccard__label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink); }
+.ccard__sub { display: block; font-size: 10px; color: var(--mute); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ccard__x { background: none; border: none; color: var(--line); cursor: pointer; font-size: 10px; padding: 2px; }
+.ccard__x:hover { color: var(--danger); }
+
 .center__speech {
   position: absolute; bottom: 10px; max-width: 80%; text-align: center;
   color: var(--violet); font-size: 12px; opacity: 0.85;

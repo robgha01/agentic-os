@@ -10,6 +10,7 @@ import { Panel } from "./components/Panel.js";
 import { CommandBar } from "./components/CommandBar.js";
 import { AuthPrompt } from "./components/AuthPrompt.js";
 import { DocViewer } from "./components/DocViewer.js";
+import { ContextCards } from "./components/ContextCards.js";
 import { Options } from "./components/Options.js";
 import { useGateway } from "./useGateway.js";
 import { loadLayout, moveWidget, saveLayout, type Layout, type SlotId } from "./layout.js";
@@ -44,6 +45,7 @@ export function App() {
             <Panel side="left" slots={["left-top", "left-mid", "left-bottom"]} layout={layout} hud={hud} onMove={onMove} />
 
             <section className="center">
+              <ContextCards hud={hud} />
               <Core state={hud.coreState} />
               <div className="center__state">{CORE_LABEL[hud.coreState]}</div>
               <div className="center__count">{hud.signals.toLocaleString()}</div>
