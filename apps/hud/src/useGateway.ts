@@ -95,6 +95,28 @@ function prettify(id: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : id;
 }
 
+// Task notification cards persist until dismissed — survive reload / restart.
+const CARDS_KEY = "aos.taskCards";
+
+function loadCards(): TaskCardView[] {
+  try {
+    const raw = localStorage.getItem(CARDS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as TaskCardView[]).slice(0, MAX_CARDS) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCards(cards: TaskCardView[]): void {
+  try {
+    localStorage.setItem(CARDS_KEY, JSON.stringify(cards));
+  } catch {
+    /* storage unavailable / quota — non-fatal */
+  }
+}
+
 export function useGateway(): HudState {
   const clientRef = useRef<GatewayClient>();
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
@@ -108,10 +130,11 @@ export function useGateway(): HudState {
   const [listening, setListening] = useState(false);
   const [records, setRecords] = useState<VaultSummary[]>([]);
   const [openDocPath, setOpenDocPath] = useState<string | null>(null);
-  const [taskCards, setTaskCards] = useState<TaskCardView[]>([]);
+  const [taskCards, setTaskCards] = useState<TaskCardView[]>(loadCards);
 
   const noteId = useRef(0);
-  const cardId = useRef(0);
+  // Seed past any persisted ids so new cards never collide with restored ones.
+  const cardId = useRef(taskCards.reduce((m, c) => Math.max(m, c.id + 1), 0));
   // opId -> the started op's identity, so completion cards can be labelled.
   const opMeta = useRef(new Map<string, { actionId: string; skillId: string | null }>());
   const sinceTick = useRef(0);
@@ -217,6 +240,11 @@ export function useGateway(): HudState {
     client.connect();
     return () => client.dispose();
   }, [handleEvent]);
+
+  // Persist notification cards so undismissed ones survive reload / restart.
+  useEffect(() => {
+    saveCards(taskCards);
+  }, [taskCards]);
 
   // Load the command deck once online (retry while offline).
   useEffect(() => {
