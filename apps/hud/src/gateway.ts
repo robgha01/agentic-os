@@ -25,6 +25,9 @@ export interface VaultSummary {
 export interface VaultDoc {
   frontmatter: Record<string, unknown>;
   body: string;
+  path?: string;
+  /** obsidian:// deep link to open the note in Obsidian. */
+  obsidianUri?: string;
 }
 
 /** Sanitized gateway configuration for the Options view. */

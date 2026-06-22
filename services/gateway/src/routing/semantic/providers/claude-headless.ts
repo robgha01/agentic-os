@@ -87,7 +87,7 @@ export class ClaudeHeadlessProvider implements RouterProvider {
       const child = spawn(
         this.bin,
         ["-p", "--output-format", "json", "--model", this.model],
-        { stdio: ["pipe", "pipe", "pipe"] },
+        { stdio: ["pipe", "pipe", "pipe"], shell: true }, // shell:true resolves claude.cmd on Windows
       );
 
       let stdout = "";

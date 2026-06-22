@@ -172,22 +172,21 @@ const synthesizeResearch: NativeHandler = async (ctx) => {
     `Items:`,
     corpus,
     ``,
-    `Write GitHub-flavored markdown with exactly these sections:`,
-    `## Signal`,
-    `2–4 sentences: what the community is actually discussing about "${topic}" right now, grounded in the items.`,
-    `## Rising`,
-    `Bullets for what's gaining traction — each citing [n].`,
-    `## Friction`,
-    `Bullets for criticism / failures / losing traction — each citing [n]. If none appear in the items, write: "Not evident in the last 30 days of items."`,
+    `Write GitHub-flavored markdown using these BOLD labels (do NOT use # headings):`,
+    `**Signal** — 2–4 sentences on what the community is actually discussing about "${topic}" right now, grounded in the items.`,
+    `**Rising** — then a bulleted list of what's gaining traction, each citing [n].`,
+    `**Friction** — then a bulleted list of criticism / failures / losing traction, each citing [n]. If none appear in the items, write "Not evident in the last 30 days of items."`,
     ``,
-    `Every claim must trace to an item. Do not invent sources.`,
+    `Do not use markdown headings. Every claim must trace to an item. Do not invent sources.`,
   ].join("\n");
 
   try {
     const out = await ctx.services.llm.complete(prompt, { system, maxTokens: 1200 });
-    if (out) {
-      ctx.context.synthesis = out;
-      ctx.emit(`synthesize-research: synthesized via ${ctx.services.llm.id}\n`);
+    if (out && out.trim()) {
+      ctx.context.synthesis = out.trim();
+      ctx.emit(`synthesize-research: synthesized via ${ctx.services.llm.id} (${out.trim().length} chars)\n`);
+    } else {
+      ctx.emit(`synthesize-research: LLM (${ctx.services.llm.id}) returned empty; continuing without synthesis\n`);
     }
   } catch (err) {
     ctx.emit(`synthesize-research: failed (${(err as Error).message}); continuing without synthesis\n`);

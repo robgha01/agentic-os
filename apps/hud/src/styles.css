@@ -258,6 +258,13 @@ a { color: var(--magenta); }
   padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel-2);
 }
 .docviewer__path { font-size: 11px; color: var(--mute); letter-spacing: 0.06em; }
+.docviewer__actions { display: flex; align-items: center; gap: 14px; }
+.docviewer__obsidian {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--violet);
+  text-decoration: none; border: 1px solid color-mix(in srgb, var(--violet) 45%, var(--line));
+  border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+}
+.docviewer__obsidian:hover { color: var(--ink); border-color: var(--violet); }
 .docviewer__close { background: none; border: none; color: var(--mute); cursor: pointer; font-size: 14px; }
 .docviewer__close:hover { color: var(--magenta); }
 .doc { overflow: auto; padding: 28px 32px; }

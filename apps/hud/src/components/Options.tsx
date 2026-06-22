@@ -23,16 +23,17 @@ export function Options({ hud }: { hud: HudState }) {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
 
+  // Stable callback + status only — not the whole `hud` (which changes each tick).
+  const fetchConfig = hud.fetchConfig;
   useEffect(() => {
     let alive = true;
-    hud
-      .fetchConfig()
+    fetchConfig()
       .then((c) => alive && setCfg(c))
       .catch(() => alive && setError(true));
     return () => {
       alive = false;
     };
-  }, [hud, hud.status]);
+  }, [fetchConfig, hud.status]);
 
   if (error) return <div className="options"><div className="empty">Gateway offline — start it with <code>npm run start</code>.</div></div>;
   if (!cfg) return <div className="options"><div className="empty">Loading settings…</div></div>;

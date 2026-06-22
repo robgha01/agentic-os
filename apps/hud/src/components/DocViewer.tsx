@@ -14,18 +14,20 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
   const [doc, setDoc] = useState<VaultDoc | null>(null);
   const [error, setError] = useState(false);
 
+  // Depend on `path` + the stable fetchDoc callback only. Depending on the whole
+  // `hud` object would re-run (and reset scroll) on every event-stream tick.
+  const fetchDoc = hud.fetchDoc;
   useEffect(() => {
     let alive = true;
     setDoc(null);
     setError(false);
-    hud
-      .fetchDoc(path)
+    fetchDoc(path)
       .then((d) => alive && (d ? setDoc(d) : setError(true)))
       .catch(() => alive && setError(true));
     return () => {
       alive = false;
     };
-  }, [path, hud]);
+  }, [path, fetchDoc]);
 
   const fm = doc?.frontmatter ?? {};
   const title = String(fm.title ?? path);
@@ -41,9 +43,16 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
       <div className="docviewer" onClick={(e) => e.stopPropagation()}>
         <header className="docviewer__head">
           <div className="docviewer__path">{path}</div>
-          <button className="docviewer__close" onClick={hud.closeDoc} aria-label="Close">
-            ✕
-          </button>
+          <div className="docviewer__actions">
+            {doc?.obsidianUri ? (
+              <a className="docviewer__obsidian" href={doc.obsidianUri}>
+                Open in Obsidian ↗
+              </a>
+            ) : null}
+            <button className="docviewer__close" onClick={hud.closeDoc} aria-label="Close">
+              ✕
+            </button>
+          </div>
         </header>
         {error ? (
           <div className="empty">Couldn't load this record.</div>
@@ -59,7 +68,11 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
                 ))}
               </div>
             ) : null}
-            <div className="doc__body" dangerouslySetInnerHTML={{ __html: marked.parse(doc.body) as string }} />
+            <div
+              className="doc__body"
+              // Strip the body's leading H1 — we already render the title above.
+              dangerouslySetInnerHTML={{ __html: marked.parse(doc.body.replace(/^\s*#\s+[^\n]*\n+/, "")) as string }}
+            />
           </article>
         )}
       </div>

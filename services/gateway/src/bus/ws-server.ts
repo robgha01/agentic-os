@@ -4,6 +4,7 @@
  * inbound `ClientCommand`s drive the dispatcher.
  */
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientCommand, OsEvent } from "@aos/shared";
@@ -119,7 +120,12 @@ export class GatewayServer {
         case "/vault/doc": {
           const path = url.searchParams.get("path") ?? "";
           const doc = this.vault.readByPath(path);
-          return doc ? json(res, doc) : json(res, { error: "not found" }, 404);
+          if (!doc) return json(res, { error: "not found" }, 404);
+          // Deep link to open the note in Obsidian (matches the file's vault).
+          // Forward slashes are the most portable in the obsidian:// path param.
+          const abs = join(config.vault.path, path).replace(/\\/g, "/");
+          const obsidianUri = `obsidian://open?path=${encodeURIComponent(abs)}`;
+          return json(res, { ...doc, path, obsidianUri });
         }
         default:
           res.writeHead(404, cors);

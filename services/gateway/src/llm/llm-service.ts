@@ -44,12 +44,7 @@ class AnthropicSdkLlm implements LlmService {
   }
 }
 
-interface ClaudeCliResult {
-  result?: string;
-  is_error?: boolean;
-}
-
-/** Hidden `claude -p` session. */
+/** Hidden `claude -p` session. Plain-text output (no JSON envelope to parse). */
 class ClaudeHeadlessLlm implements LlmService {
   readonly id = "headless";
   constructor(
@@ -61,8 +56,10 @@ class ClaudeHeadlessLlm implements LlmService {
   complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
     const full = opts.system ? `${opts.system}\n\n${prompt}` : prompt;
     return new Promise((resolve, reject) => {
-      const child = spawn(this.bin, ["-p", "--model", this.model, "--output-format", "json"], {
+      // shell:true so Windows resolves the `claude.cmd` shim (npm global bin).
+      const child = spawn(this.bin, ["-p", "--model", this.model], {
         stdio: ["pipe", "pipe", "pipe"],
+        shell: true,
       });
       let stdout = "";
       let stderr = "";
@@ -79,14 +76,10 @@ class ClaudeHeadlessLlm implements LlmService {
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        if (code !== 0) return reject(new Error(`claude -p exited ${code}: ${stderr.trim()}`));
-        try {
-          const env = JSON.parse(stdout) as ClaudeCliResult;
-          if (env.is_error || !env.result) return reject(new Error("claude -p returned no result"));
-          resolve(env.result.trim());
-        } catch {
-          reject(new Error("claude -p output was not valid JSON"));
-        }
+        const out = stdout.trim();
+        if (code !== 0) return reject(new Error(`claude -p exited ${code}: ${stderr.trim() || "(no stderr)"}`));
+        if (!out) return reject(new Error(`claude -p produced no output${stderr ? `: ${stderr.trim()}` : ""}`));
+        resolve(out);
       });
 
       child.stdin.write(full);
