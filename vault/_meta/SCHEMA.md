@@ -11,6 +11,7 @@ violates these.
 | `ticket` | `30-tickets/` | yes | Summary · Outcome |
 | `telemetry` | `40-telemetry/` | no | Metrics |
 | `daily` | `01-daily/` | no | Operations |
+| `inbox` | `02-inbox/` | yes | Action items |
 
 Notes:
 - "Required section" means a `## <Heading>` that is present and non-empty.

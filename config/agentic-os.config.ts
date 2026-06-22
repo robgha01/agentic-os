@@ -64,6 +64,19 @@ export interface AgenticOsConfig {
     /** Base URL of the optional Python voice sidecar. */
     sidecarUrl: string;
   };
+  /**
+   * Optional mail integration for inbox triage. `none` (default) disables it.
+   * `outlook` talks to Microsoft 365 / Outlook via Microsoft Graph using an
+   * access token the user supplies (work or personal Outlook). Token lives in
+   * the env var named by `tokenEnv`.
+   */
+  mail: {
+    provider: "none" | "outlook" | "gmail" | "imap";
+    /** Name of the env var holding the OAuth access token. */
+    tokenEnv: string;
+    /** Microsoft Graph base URL (override for sovereign clouds). */
+    graphBaseUrl: string;
+  };
 }
 
 function env(name: string, fallback: string): string {
@@ -127,5 +140,13 @@ export const config: AgenticOsConfig = {
       apiKeyEnv: envOpt("AGENTIC_OS_TTS_API_KEY_ENV"),
     },
     sidecarUrl: env("AGENTIC_OS_VOICE_SIDECAR_URL", `http://localhost:${voicePort}`),
+  },
+  mail: {
+    provider: ((): "none" | "outlook" | "gmail" | "imap" => {
+      const p = env("AGENTIC_OS_MAIL_PROVIDER", "none");
+      return p === "outlook" || p === "gmail" || p === "imap" ? p : "none";
+    })(),
+    tokenEnv: env("AGENTIC_OS_MAIL_TOKEN_ENV", "AGENTIC_OS_MAIL_TOKEN"),
+    graphBaseUrl: env("AGENTIC_OS_GRAPH_BASE_URL", "https://graph.microsoft.com/v1.0"),
   },
 };

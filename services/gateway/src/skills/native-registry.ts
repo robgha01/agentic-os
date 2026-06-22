@@ -10,6 +10,7 @@
  */
 import type { RoutedIntent } from "@aos/shared";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
+import type { MailProvider } from "../mail/mail-provider.js";
 import { buildResultDocument, type SourceRef } from "../memory/document-builder.js";
 
 /** Services the gateway injects into every native handler. */
@@ -17,6 +18,8 @@ export interface SkillServices {
   vault: VaultAdapter;
   /** Injected clock — keeps builds deterministic/testable. */
   nowIso: () => string;
+  /** Configured mail backend; undefined when mail is disabled. */
+  mail?: MailProvider;
 }
 
 export interface NativeHandlerContext {
@@ -140,8 +143,71 @@ const compileResearch: NativeHandler = async (ctx) => {
   return 0;
 };
 
+// --- Inbox triage (Outlook / Microsoft 365 via Graph) -----------------------
+
+/** Heuristic: does this message likely want a reply? */
+function likelyNeedsReply(subject: string, snippet: string, flagged: boolean): boolean {
+  if (flagged) return true;
+  const hay = `${subject} ${snippet}`.toLowerCase();
+  return /\?|please|can you|could you|action required|reply|review|approve|sign|deadline|by (mon|tue|wed|thu|fri|today|tomorrow)/.test(hay);
+}
+
+/** Triage unread mail into a contract-compliant inbox record in the vault. */
+const inboxTriage: NativeHandler = async (ctx) => {
+  const mail = ctx.services.mail;
+  if (!mail) {
+    ctx.emit("inbox-triage: no mail provider configured (set AGENTIC_OS_MAIL_PROVIDER)\n");
+    return 1;
+  }
+
+  let messages;
+  try {
+    messages = await mail.listUnread(50);
+  } catch (err) {
+    ctx.emit(`inbox-triage: fetch failed (${(err as Error).message})\n`);
+    return 1;
+  }
+
+  const actionable = messages.filter((m) => likelyNeedsReply(m.subject, m.snippet, m.flagged));
+
+  const link = (m: { subject: string; webLink?: string }) =>
+    m.webLink ? `[${m.subject}](${m.webLink})` : m.subject;
+
+  const actionItems =
+    actionable.length > 0
+      ? actionable.map((m) => `- **${m.from}** — ${link(m)}`).join("\n")
+      : "- Nothing flagged as needing a reply.";
+
+  // Group counts by sender for the "By sender" overview.
+  const bySender = new Map<string, number>();
+  for (const m of messages) bySender.set(m.from, (bySender.get(m.from) ?? 0) + 1);
+  const senderLines =
+    [...bySender.entries()].sort((a, b) => b[1] - a[1]).map(([s, n]) => `- ${s}: ${n}`).join("\n") ||
+    "- (no unread mail)";
+
+  const dateKey = (ctx.services.nowIso().split("T")[0] ?? ctx.services.nowIso()).slice(0, 10);
+  const built = buildResultDocument({
+    type: "inbox",
+    key: dateKey,
+    title: `Inbox triage — ${dateKey}`,
+    source: "inbox-triage",
+    tldr: `${messages.length} unread; ${actionable.length} likely need a reply.`,
+    sections: { "Action items": actionItems, "By sender": senderLines },
+    status: "complete",
+    confidence: "medium",
+    staleAfterMinutes: 60,
+    tags: ["inbox", `mail/${mail.id}`],
+    inputs: { provider: mail.id },
+    now: ctx.services.nowIso(),
+  });
+
+  const path = ctx.services.vault.writeGenerated(built.frontmatter, built.generated);
+  ctx.emit(`inbox-triage: ${messages.length} unread, ${actionable.length} actionable -> ${path}\n`);
+  return 0;
+};
+
 export const NATIVE_HANDLERS: Record<string, NativeHandler> = {
   fetchHackerNews,
   compileResearch,
-  // inboxTriage: deferred — needs email credentials (Phase 3b)
+  inboxTriage,
 };

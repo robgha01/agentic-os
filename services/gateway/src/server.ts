@@ -18,6 +18,7 @@ import { VaultAdapter } from "./memory/vault-adapter.js";
 import { VaultRecorder } from "./memory/vault-recorder.js";
 import { Speaker, SpeechBridge } from "./voice/speaker.js";
 import { createTtsProvider } from "./voice/tts-provider.js";
+import { createMailProvider, type MailProvider } from "./mail/mail-provider.js";
 
 async function main(): Promise<void> {
   const runtime = await detectRuntime();
@@ -38,10 +39,20 @@ async function main(): Promise<void> {
   const skillCount = loader.load();
 
   const router = new Router({ runtime });
+
+  // Optional mail backend for inbox triage (disabled unless configured).
+  let mail: MailProvider | undefined;
+  try {
+    mail = createMailProvider();
+  } catch (err) {
+    console.warn(`[gateway] mail disabled: ${(err as Error).message}`);
+  }
+
   // Share one vault + skill runtime so skills and the recorder write the same tree.
   const skillRuntime = new SkillRuntime(bus, loader, {
     vault,
     nowIso: () => new Date().toISOString(),
+    mail,
   });
   const dispatcher = new Dispatcher(router, loader, bus, runtime, skillRuntime);
 
@@ -52,6 +63,7 @@ async function main(): Promise<void> {
   console.log(`[gateway] skills loaded: ${skillCount} (${loader.all().map((s) => s.id).join(", ") || "none"})`);
   console.log(`[gateway] runtime:`, runtime);
   console.log(`[gateway] voice: mode=${config.voice.mode}` + (config.voice.mode === "voice" ? ` tts=${config.voice.tts.provider} sidecar=${config.voice.sidecarUrl}` : ""));
+  console.log(`[gateway] mail: ${mail ? mail.id : "disabled"}`);
 
   const shutdown = async (): Promise<void> => {
     console.log("\n[gateway] shutting down…");

@@ -1,7 +1,7 @@
 {
   "id": "inbox-triage",
   "name": "Inbox Triage",
-  "description": "Classifies, summarizes, and surfaces action items from unread email. Runs locally for privacy.",
+  "description": "Fetches unread mail (Outlook / Microsoft 365 via Graph; provider configurable) and compiles a triage record — counts, likely-needs-reply action items, and a by-sender overview — into the vault.",
   "triggers": ["inbox-triage"],
   "surfaces": ["deck", "nl"],
   "presentation": {
@@ -11,13 +11,13 @@
     "inputs": []
   },
   "modelPolicy": {
-    "execTier": "light",
+    "execTier": "none",
     "privacy": "local-only"
   },
   "execution": {
     "kind": "native",
     "handler": "inboxTriage"
   },
-  "vaultOutput": "inbox/triage.md",
+  "vaultOutput": "02-inbox/{{date}}.md",
   "staleAfterMinutes": 60
 }

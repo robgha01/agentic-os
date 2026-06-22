@@ -12,6 +12,7 @@ outside context. These conventions are enforced by the gateway's vault adapter
 |---|---|
 | `00-inbox/` | Unsorted captures awaiting filing. |
 | `01-daily/` | One note per day (`YYYY-MM-DD.md`): the **Operations** log + brief/schedule. |
+| `02-inbox/` | Inbox-triage records (`YYYY-MM-DD.md`): unread counts + action items. |
 | `10-research/` | Deep-research / Last-30-Days briefs, one file per topic. |
 | `20-knowledge/` | Durable, curated wisdom & findings — the long-term wiki. |
 | `30-tickets/` | Ship-ticket records. |
