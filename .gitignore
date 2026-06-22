@@ -60,3 +60,6 @@ vault/**
 !vault/_templates/**
 !vault/90-maps/
 !vault/90-maps/**
+planing/notificationboxes.txt
+planing/vaultreference.txt
+planing/yamlandother.txt

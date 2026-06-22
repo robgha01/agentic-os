@@ -1,0 +1,30 @@
+### TECHNICAL ARCHITECTURE: HOW THE /last30days ENGINE OPERATES
+
+To correctly write, debug, or extend the `/last30days` research engine, you must understand its internal data extraction, weighting, and synthesis pipeline. It does not use standard search index lookups. It operates as an immediate real-time scraping and vector aggregation loop.
+
+### PHASE 1: ASYNCHRONOUS INGESTION ENGINE
+When a topic is query-targeted, the engine executes concurrent, low-level HTTP client or headless browser fetch requests to bypass traditional SEO content. It targets high-signal community spaces exclusively:
+1. Reddit & Hacker News: Pulls raw comment threads from high-density, niche subreddits and story indexes.
+2. X (Twitter): Pulls recent chronological tweets via targeted engagement filters.
+3. YouTube & TikTok: Extracts audio transcription streams using local video-metadata wrappers (like yt-dlp).
+4. Polymarket: Pulls real-money predictive contract betting percentages to calculate probabilistic sentiment metrics.
+
+### PHASE 2: DETOXIFICATION & ENGAGEMENT WEIGHTING
+The collected data is heavily filtered to remove low-signal noise, spam, and unvetted content. The engine computes a "Traction Weight" for every scraped text node:
+- Weight Formula Factor: Upvote-to-Downvote ratios, Reply Depth, Retweets, and Engagement Velocity.
+- High-Traction Prioritization: Text strings with a traction score above a dynamic threshold are preserved; everything else is truncated to save LLM context space.
+- Context Compression: Text nodes are packed tightly into a clean, unified markdown matrix, stripped of HTML boilerplate or platform styling.
+
+### PHASE 3: METRIC-DRIVEN MATRIX SYNTHESIS
+The structured context block is then evaluated using intent classification. The engine routes the data through one of three specific operational models depending on user intent:
+- RECOMMENDATION MENTALITY: Tokenizes and indexes specific tool names, library configurations, or hardware specs. It counts exact occurrences and matches them with community frustration/satisfaction adjectives.
+- PROMPTING/TECHNICAL MENTALITY: Isolates code snippets, structural parameters, or JSON structures that are actively reported as functional in production.
+- BREAKING TECH NEWS: Maps the absolute timeline of changes, API updates, or corporate policy moves over the strict 30-day window.
+
+### PHASE 4: THE GROUNDING REQUIREMENT
+The system enforces a zero-hallucination, strict grounding contract. When synthesizing the final report:
+- Every data marker, trend vector, or conclusion MUST map directly to a verified anchor in the raw context matrix.
+- Speculative statements or historic training data prior to the 30-day scraping window must be treated as low-confidence or explicitly excluded.
+- Outputs must present high-contrast realities: What works vs. what fails, what is losing traction vs. what is rapidly rising.
+
+Use this foundational logic whenever you are asked to adjust the ingestion scripts, modify the weighting filters, or compile raw context into the final brief.
