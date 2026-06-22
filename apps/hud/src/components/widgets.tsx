@@ -122,15 +122,16 @@ function CommandDeck({ hud }: { hud: HudState }) {
 }
 
 function VaultFeed({ hud }: { hud: HudState }) {
-  if (hud.operations.length === 0) return <Empty>The audit trail of operations will appear here.</Empty>;
+  if (hud.records.length === 0) return <Empty>Records the OS writes to the vault appear here. Click one to open it.</Empty>;
   return (
     <ul className="feed">
-      {hud.operations.map((o) => (
-        <li className="feed__row" key={o.opId}>
-          <span className={`dot dot--${o.status}`} aria-hidden />
-          <span className="feed__action">{o.actionId}</span>
-          <span className="feed__skill">{o.skillId ?? "—"}</span>
-          <span className="feed__time">{timeOf(o.startedAt)}</span>
+      {hud.records.map((r) => (
+        <li key={r.path}>
+          <button className="feed__row feed__row--btn" onClick={() => hud.openDoc(r.path)} title={r.title}>
+            <span className="feed__type">{r.type}</span>
+            <span className="feed__title">{r.title}</span>
+            <span className="feed__time">{timeOf(r.updated)}</span>
+          </button>
         </li>
       ))}
     </ul>

@@ -19,10 +19,14 @@ export function parseDocument(content: string): ParsedDocument {
 }
 
 export function serializeDocument(body: string, data: Record<string, unknown>): string {
-  // js-yaml cannot dump `undefined`; drop optional keys that weren't set.
+  // Drop noise so the Properties block stays human-friendly: undefined values
+  // (js-yaml can't dump them) and empty arrays/objects.
   const clean: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(data)) {
-    if (v !== undefined) clean[k] = v;
+    if (v === undefined) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0) continue;
+    clean[k] = v;
   }
   // Trailing newline keeps the file POSIX-clean.
   const out = matter.stringify(body.endsWith("\n") ? body : `${body}\n`, clean);

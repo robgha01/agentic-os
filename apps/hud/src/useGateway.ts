@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand, OsEvent, SkillCard } from "@aos/shared";
-import { GatewayClient, type ConnectionStatus } from "./gateway.js";
+import { GatewayClient, type ConnectionStatus, type VaultDoc, type VaultSummary } from "./gateway.js";
 
 export type CoreState = "idle" | "listening" | "thinking" | "speaking";
 
@@ -47,9 +47,14 @@ export interface HudState {
   signals: number;
   signalSeries: number[];
   coreState: CoreState;
+  records: VaultSummary[];
+  openDocPath: string | null;
   send: (cmd: ClientCommand) => void;
   clearNotifications: () => void;
   setListening: (on: boolean) => void;
+  openDoc: (path: string) => void;
+  closeDoc: () => void;
+  fetchDoc: (path: string) => Promise<VaultDoc | null>;
 }
 
 const MAX_OPS = 60;
@@ -67,11 +72,14 @@ export function useGateway(): HudState {
   const [signals, setSignals] = useState(0);
   const [signalSeries, setSignalSeries] = useState<number[]>(() => Array(SERIES_LEN).fill(0));
   const [listening, setListening] = useState(false);
+  const [records, setRecords] = useState<VaultSummary[]>([]);
+  const [openDocPath, setOpenDocPath] = useState<string | null>(null);
 
   const noteId = useRef(0);
   const sinceTick = useRef(0);
   const runningCount = useRef(0);
   const [runningTick, setRunningTick] = useState(0); // forces coreState recompute
+  const [settledCount, setSettledCount] = useState(0); // refetch vault on op end
 
   const handleEvent = useCallback((e: OsEvent) => {
     setSignals((n) => n + 1);
@@ -103,6 +111,7 @@ export function useGateway(): HudState {
       case "operation.completed":
         runningCount.current = Math.max(0, runningCount.current - 1);
         setRunningTick((t) => t + 1);
+        setSettledCount((c) => c + 1);
         setOperations((ops) =>
           ops.map((o) => (o.opId === e.opId ? { ...o, status: "done", exitCode: e.exitCode } : o)),
         );
@@ -110,6 +119,7 @@ export function useGateway(): HudState {
       case "operation.failed":
         runningCount.current = Math.max(0, runningCount.current - 1);
         setRunningTick((t) => t + 1);
+        setSettledCount((c) => c + 1);
         setOperations((ops) =>
           ops.map((o) => (o.opId === e.opId ? { ...o, status: "failed", error: e.error } : o)),
         );
@@ -152,6 +162,19 @@ export function useGateway(): HudState {
     };
   }, [status]);
 
+  // Refresh the vault feed when online and whenever an operation settles.
+  useEffect(() => {
+    if (status !== "online") return;
+    let alive = true;
+    clientRef.current
+      ?.fetchRecent()
+      .then((r) => alive && setRecords(r))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [status, settledCount]);
+
   // Sample the signal rate every 2s for the sparkline / big counter.
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -163,6 +186,12 @@ export function useGateway(): HudState {
 
   const send = useCallback((cmd: ClientCommand) => clientRef.current?.send(cmd), []);
   const clearNotifications = useCallback(() => setNotifications([]), []);
+  const openDoc = useCallback((path: string) => setOpenDocPath(path), []);
+  const closeDoc = useCallback(() => setOpenDocPath(null), []);
+  const fetchDoc = useCallback(
+    (path: string) => clientRef.current?.fetchDoc(path) ?? Promise.resolve(null),
+    [],
+  );
 
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
@@ -183,8 +212,13 @@ export function useGateway(): HudState {
     signals,
     signalSeries,
     coreState,
+    records,
+    openDocPath,
     send,
     clearNotifications,
     setListening,
+    openDoc,
+    closeDoc,
+    fetchDoc,
   };
 }

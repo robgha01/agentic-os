@@ -9,6 +9,7 @@ import { TopBar } from "./components/TopBar.js";
 import { Panel } from "./components/Panel.js";
 import { CommandBar } from "./components/CommandBar.js";
 import { AuthPrompt } from "./components/AuthPrompt.js";
+import { DocViewer } from "./components/DocViewer.js";
 import { useGateway } from "./useGateway.js";
 import { loadLayout, moveWidget, saveLayout, type Layout, type SlotId } from "./layout.js";
 
@@ -53,6 +54,7 @@ export function App() {
 
       <CommandBar hud={hud} />
 
+      {hud.openDocPath ? <DocViewer hud={hud} path={hud.openDocPath} /> : null}
       {hud.auth ? <AuthPrompt auth={hud.auth} /> : null}
     </div>
   );

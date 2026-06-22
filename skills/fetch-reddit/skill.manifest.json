@@ -1,0 +1,15 @@
+{
+  "id": "fetch-reddit",
+  "name": "Fetch Reddit",
+  "description": "Sub-skill: fetches recent top Reddit posts for a topic via the public search.json endpoint (no key) and appends them to the shared research context.",
+  "triggers": ["fetch-reddit"],
+  "surfaces": [],
+  "modelPolicy": {
+    "execTier": "none",
+    "privacy": "cloud-ok"
+  },
+  "execution": {
+    "kind": "native",
+    "handler": "fetchReddit"
+  }
+}

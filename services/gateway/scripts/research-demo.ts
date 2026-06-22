@@ -34,11 +34,13 @@ async function main(): Promise<void> {
   // A) Deterministic compile from seeded context (no network).
   console.log("\n--- A) compileResearch (seeded, offline) ---");
   const seeded = {
-    hnItems: [
-      { title: "Async Rust in 2026", url: "https://example.com/a", points: 412, author: "alice" },
-      { title: "Tokio internals deep dive", url: "https://example.com/b", points: 287, author: "bob" },
+    researchItems: [
+      { title: "Async Rust in 2026", url: "https://example.com/a", score: 412, author: "alice", source: "Hacker News" },
+      { title: "Tokio internals deep dive", url: "https://example.com/b", score: 287, author: "bob", source: "Reddit" },
     ],
-    hnSearchUrl: "https://hn.algolia.com/?query=rust%20async&dateRange=pastMonth&type=story",
+    searchSources: [
+      { label: "Hacker News search: rust async", url: "https://hn.algolia.com/?query=rust%20async&dateRange=pastMonth&type=story" },
+    ],
   };
   const code = await NATIVE_HANDLERS.compileResearch!({
     intent: intentFor("rust async"),

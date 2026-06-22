@@ -89,15 +89,9 @@ export function buildResultDocument(input: ResultDocumentInput): BuiltDocument {
     parts.push(`## Sources\n\n${list}`);
   }
 
+  // Provenance lives in the frontmatter (source/model/status/confidence), so the
+  // body stays human-first — no footer.
   const status: VaultStatus = input.status ?? "complete";
-  const footerBits = [
-    `Produced by \`${input.source}\``,
-    input.model ? `model ${input.model}` : null,
-    input.now,
-    `status: ${status}`,
-    input.confidence ? `confidence: ${input.confidence}` : null,
-  ].filter(Boolean);
-  parts.push(`---\n_${footerBits.join(" · ")}._`);
 
   // --- Frontmatter ---------------------------------------------------------
   const frontmatter = VaultFrontmatterSchema.parse({

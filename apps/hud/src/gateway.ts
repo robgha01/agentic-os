@@ -12,6 +12,21 @@ const WS_URL = HTTP_BASE.replace(/^http/, "ws");
 
 export type ConnectionStatus = "connecting" | "online" | "offline";
 
+/** A vault record summary (V.A.U.L.T. feed row). */
+export interface VaultSummary {
+  type: string;
+  key: string;
+  title: string;
+  updated: string;
+  path: string;
+}
+
+/** A vault record's content for the viewer. */
+export interface VaultDoc {
+  frontmatter: Record<string, unknown>;
+  body: string;
+}
+
 export class GatewayClient {
   private ws?: WebSocket;
   private reconnectTimer?: number;
@@ -55,6 +70,18 @@ export class GatewayClient {
     const res = await fetch(`${HTTP_BASE}/skills`);
     const data = (await res.json()) as { skills: SkillCard[] };
     return data.skills;
+  }
+
+  async fetchRecent(): Promise<VaultSummary[]> {
+    const res = await fetch(`${HTTP_BASE}/vault/recent`);
+    const data = (await res.json()) as { records: VaultSummary[] };
+    return data.records;
+  }
+
+  async fetchDoc(path: string): Promise<VaultDoc | null> {
+    const res = await fetch(`${HTTP_BASE}/vault/doc?path=${encodeURIComponent(path)}`);
+    if (!res.ok) return null;
+    return (await res.json()) as VaultDoc;
   }
 
   dispose(): void {

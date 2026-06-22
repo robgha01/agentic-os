@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   });
   const dispatcher = new Dispatcher(router, loader, bus, runtime, skillRuntime);
 
-  const server = new GatewayServer(bus, dispatcher, loader, config.ports.gateway);
+  const server = new GatewayServer(bus, dispatcher, loader, vault, config.ports.gateway);
   await server.start();
 
   console.log(`[gateway] listening on http://localhost:${server.port}  (ws + /health)`);

@@ -40,6 +40,12 @@ build/
 # Brainstorming companion (visual mockups)
 .superpowers/
 
+# Planning screenshots (the prompt text stays tracked)
+planing/*.png
+
+# Vault data must never live under a package dir (vault is repo-root only)
+services/*/vault/
+
 # Agentic OS task scratch + coordination state (ephemeral)
 .agentic-os/tasks/
 .agentic-os/state/

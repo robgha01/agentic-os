@@ -91,7 +91,13 @@ async function partC(): Promise<void> {
   const loader = new SkillLoader();
   loader.load();
   const dispatcher = new Dispatcher(new Router({ runtime: RUNTIME }), loader, bus, RUNTIME);
-  const server = new GatewayServer(bus, dispatcher, loader, 0); // ephemeral port
+  const server = new GatewayServer(
+    bus,
+    dispatcher,
+    loader,
+    new VaultAdapter(mkdtempSync(join(tmpdir(), "aos-rt-ws-"))),
+    0,
+  ); // ephemeral port
   await server.start();
 
   const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);

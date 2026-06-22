@@ -8,7 +8,12 @@
  * overridable per machine.
  */
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Repo root resolved from this file's location (<root>/config/agentic-os.config.ts),
+// so the vault lands in <root>/vault regardless of which package's CWD started us.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export interface AgenticOsConfig {
   router: {
@@ -41,8 +46,14 @@ export interface AgenticOsConfig {
     model: string;
   };
   vault: {
-    /** Absolute or repo-relative path to the Obsidian vault root. */
+    /** Absolute path to the Obsidian vault root. */
     path: string;
+    /**
+     * When true, the OS wraps its content in `<!-- aos:begin/end -->` markers so
+     * hand-edits outside them survive regeneration. Default false = clean,
+     * human-first files (regeneration overwrites the record).
+     */
+    managedBlocks: boolean;
   };
   ports: {
     gateway: number;
@@ -137,7 +148,8 @@ export const config: AgenticOsConfig = {
     model: env("OLLAMA_MODEL", "llama3:8b"),
   },
   vault: {
-    path: env("AGENTIC_OS_VAULT_PATH", "./vault"),
+    path: env("AGENTIC_OS_VAULT_PATH", join(REPO_ROOT, "vault")),
+    managedBlocks: env("AGENTIC_OS_VAULT_MANAGED_BLOCKS", "false") === "true",
   },
   ports: {
     gateway: envNum("AGENTIC_OS_GATEWAY_PORT", 7777),

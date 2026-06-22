@@ -20,6 +20,7 @@ import { GatewayServer } from "../src/bus/ws-server.js";
 import { Dispatcher } from "../src/dispatch/dispatcher.js";
 import { Router } from "../src/routing/router.js";
 import { SkillLoader } from "../src/skills/skill-loader.js";
+import { VaultAdapter } from "../src/memory/vault-adapter.js";
 
 const RUNTIME: ModelRuntimeContext = { networkUp: true, anthropicKeyPresent: false, ollamaReachable: false };
 
@@ -124,7 +125,13 @@ async function main(): Promise<void> {
   console.log("\n--- live WS invoke ---");
   {
     const bus = new EventBus();
-    const server = new GatewayServer(bus, mkDispatcher(bus), loader, 0);
+    const server = new GatewayServer(
+      bus,
+      mkDispatcher(bus),
+      loader,
+      new VaultAdapter(mkdtempSync(join(tmpdir(), "aos-deck-ws-"))),
+      0,
+    );
     await server.start();
 
     const httpSkills = (await (
