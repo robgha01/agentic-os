@@ -1,0 +1,29 @@
+Act as an elite Systems Architect and Lead AI Developer. I want to build a localized "Agentic OS" developer framework inspired by the Fable 5 Jarvis architecture, integrated with a long-term knowledge graph (Obsidian) and customized high-velocity search pipelines. 
+
+Please analyze the architectural specifications below and help me build this modular system step-by-step.
+
+### 1. CORE ARCHITECTURE SPECIFICATION
+- UI/Frontend: A lightweight local web app (React/Vite or Next.js) showing live vital metrics, a document audit trail, dynamic action cards, an event schedule, and an automated visual task progress bar.
+- Voice Layer (100% Local): 
+  - STT: 'Faster Whisper' for low-latency audio transcription.
+  - TTS: 'Kokoro' open-source engine for generation of spoken responses.
+- Routing Engine:
+  - Deterministic Path: Regex parsing for instant keyword commands (e.g., "rundown", "sync").
+  - Semantic Path: Anthropic Haiku or a small local LLM (e.g., Llama 3 8B via Ollama) acting purely as a cost-efficient router to parse user intent into programmatic actions.
+
+### 2. KNOWLEDGE BASE & MEMORY ARCHITECTURE
+- Central Storage: An automated Obsidian Vault serving as an LLM Wiki/Structured Knowledge Graph.
+- Interaction Loop: The Agentic OS must constantly query and write markdown documents to log telemetry data, daily schedules, morning briefs, and tracking data.
+- Execution Protocol: When a task is called, the system checks if the relevant markdown record exists in Obsidian. If missing or stale, it triggers the execution loop.
+
+### 3. EXECUTABLE SKILL BLUEPRINTS
+You must program headless Claude Code invocations (using execution flags like `claude -p` or script wrappers) to run deterministic background actions:
+- 'Last 30 Days' Deep Research Skill: A pipeline that avoids simple web search and instead directly scrapes high-signal platforms (Reddit, X/Twitter, YouTube transcripts, TikTok, Hacker News, and technical repos) to compile deep contextual briefs.
+- Data Processing Pipelines: Modular skills to run email inbox triage, parse calendar events, and build dynamic files on demand.
+
+### 4. DEVELOPER PERSONALITY & CODING MANDATE
+- Voice: Maintain a raw, focused, system-level developer voice. 
+- Tone: Avoid clinical, over-academic terms. Focus entirely on the computational weight, execution speed, data flow logic, and the practical implementation of actions.
+- Coding Policy: Write production-ready, modular TypeScript/Python code blocks. Do not shorten loops or provide generic mock scripts. Keep systems decoupled so any model or tool can be hot-swapped.
+
+Understand the framework? Let's start by designing the project directory structure and the core configuration files for the routing engine.
