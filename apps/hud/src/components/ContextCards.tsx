@@ -50,8 +50,10 @@ export function ContextCards({ hud }: { hud: HudState }) {
     const cx = c.left + c.width / 2 - o.left;
     const cy = c.top + c.height / 2 - o.top;
     // The particle sphere's drawn radius is min(w,h)*0.32 (see Core.tsx), i.e.
-    // 0.64 of the half-box — match it so the line lands on the visible edge.
-    const radius = (Math.min(c.width, c.height) / 2) * 0.64; // sphere surface
+    // 0.64 of the half-box. Start the line a little OUTSIDE that edge so it
+    // reads as reaching toward the ball, not stuck to it.
+    const radius = (Math.min(c.width, c.height) / 2) * 0.64;
+    const startR = radius + 16;
     const next: Link[] = [];
     for (const card of cards) {
       const el = cardRefs.current.get(card.id);
@@ -62,7 +64,7 @@ export function ContextCards({ hud }: { hud: HudState }) {
       const dx = px - cx;
       const dy = py - cy;
       const dist = Math.hypot(dx, dy) || 1;
-      next.push({ id: card.id, x1: cx + (dx / dist) * radius, y1: cy + (dy / dist) * radius, x2: px, y2: py });
+      next.push({ id: card.id, x1: cx + (dx / dist) * startR, y1: cy + (dy / dist) * startR, x2: px, y2: py });
     }
     setSize({ w: o.width, h: o.height });
     setLinks(next);
@@ -92,10 +94,7 @@ export function ContextCards({ hud }: { hud: HudState }) {
     <div className="orbit" ref={orbitRef} aria-label="recent task notifications">
       <svg className="orbit__links" width={size.w} height={size.h} aria-hidden="true">
         {links.map((l) => (
-          <g key={l.id}>
-            <line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
-            <circle cx={l.x1} cy={l.y1} r="2.5" />
-          </g>
+          <line key={l.id} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
         ))}
       </svg>
       <button className="orbit__clear" onClick={hud.clearCards}>
