@@ -22,19 +22,22 @@ export class GatewayServer {
     private readonly loader: SkillLoader,
     private readonly requestedPort: number,
   ) {
+    // Localhost single-user tool: allow the HUD (served from a dev/other port)
+    // to read these GET endpoints cross-origin.
+    const cors = { "access-control-allow-origin": "*" };
     this.http = createServer((req, res) => {
       if (req.url === "/health") {
-        res.writeHead(200, { "content-type": "application/json" });
+        res.writeHead(200, { "content-type": "application/json", ...cors });
         res.end(JSON.stringify({ status: "ok", clients: this.wss.clients.size }));
         return;
       }
       // The HUD fetches this on load to build the command deck.
       if (req.url === "/skills") {
-        res.writeHead(200, { "content-type": "application/json" });
+        res.writeHead(200, { "content-type": "application/json", ...cors });
         res.end(JSON.stringify({ skills: this.loader.deckCards() }));
         return;
       }
-      res.writeHead(404);
+      res.writeHead(404, cors);
       res.end();
     });
     this.wss = new WebSocketServer({ server: this.http });

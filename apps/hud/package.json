@@ -1,0 +1,25 @@
+{
+  "name": "@aos/hud",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "V.A.U.L.T. — the Agentic OS heads-up display.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@aos/shared": "*",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.11"
+  }
+}
