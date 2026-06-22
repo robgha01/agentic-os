@@ -1,0 +1,17 @@
+{
+  "id": "ship-ticket",
+  "name": "Ship Ticket (Shape A pipeline)",
+  "description": "The legacy Shape A Jira pipeline reframed as a skill: branch, implement, submit, and ship a referenced ticket via a headless Claude Code session.",
+  "triggers": ["ship-ticket"],
+  "modelPolicy": {
+    "execTier": "heavy",
+    "privacy": "cloud-ok",
+    "pin": "claude-code"
+  },
+  "execution": {
+    "kind": "claude-headless",
+    "promptTemplate": "Work the Jira ticket {{ticketId}}: create a branch, implement the change, run tests, and prepare it to ship.",
+    "args": ["--model", "claude-opus-4-8"]
+  },
+  "vaultOutput": "tickets/{{ticketId}}.md"
+}

@@ -1,0 +1,103 @@
+/**
+ * The routing engine front door.
+ *
+ * Resolution order per the spec:
+ *   1. Deterministic path — regex table (instant, no LLM, confidence 1).
+ *   2. Semantic path — IntentRouter over the configured/available brain.
+ *
+ * The semantic brain is constructed from runtime availability so the engine
+ * degrades gracefully: Haiku by default, Ollama when offline or forced.
+ */
+import type { Action, ModelRuntimeContext, RoutedIntent } from "@aos/shared";
+import { config } from "../../../../config/agentic-os.config.js";
+import { ACTION_REGISTRY } from "../actions/registry.js";
+import { ROUTES, type RouteRule } from "./routes.config.js";
+import { IntentRouter } from "./semantic/intent-router.js";
+import type { RouterProvider } from "./semantic/provider.types.js";
+import { AnthropicHaikuProvider } from "./semantic/providers/anthropic-haiku.js";
+import { ClaudeHeadlessProvider } from "./semantic/providers/claude-headless.js";
+import { OllamaProvider } from "./semantic/providers/ollama.js";
+
+export class Router {
+  private readonly catalog: readonly Action[];
+  private readonly rules: readonly RouteRule[];
+  private readonly intentRouter: IntentRouter;
+
+  constructor(opts?: {
+    catalog?: readonly Action[];
+    rules?: readonly RouteRule[];
+    provider?: RouterProvider;
+    minConfidence?: number;
+    runtime?: ModelRuntimeContext;
+  }) {
+    this.catalog = opts?.catalog ?? ACTION_REGISTRY;
+    this.rules = [...(opts?.rules ?? ROUTES)].sort((a, b) => b.priority - a.priority);
+    const provider =
+      opts?.provider ?? selectRouterProvider(opts?.runtime ?? probeRuntime());
+    this.intentRouter = new IntentRouter(
+      provider,
+      opts?.minConfidence ?? config.router.minConfidence,
+    );
+  }
+
+  /** Try the regex table; return a RoutedIntent on a hit, else null. */
+  matchRegex(input: string): RoutedIntent | null {
+    for (const rule of this.rules) {
+      if (rule.pattern.test(input)) {
+        return {
+          actionId: rule.action,
+          source: "regex",
+          confidence: 1,
+          parameters: {},
+          rawInput: input,
+        };
+      }
+    }
+    return null;
+  }
+
+  /** Full resolution: regex first, then semantic fallback. */
+  async route(input: string): Promise<RoutedIntent> {
+    return this.matchRegex(input) ?? this.intentRouter.route(input, this.catalog);
+  }
+}
+
+/**
+ * Choose the router brain from config (default provider + transport) and live
+ * availability. The cloud brain can be reached two ways:
+ *   - "headless": a hidden `claude -p` session — needs the CLI + network, not an
+ *     API key (uses local Claude Code auth).
+ *   - "sdk": the Anthropic Messages API — needs ANTHROPIC_API_KEY + network.
+ */
+export function selectRouterProvider(runtime: ModelRuntimeContext): RouterProvider {
+  const preferHaiku = config.router.defaultProvider === "haiku";
+  const headless = config.router.transport === "headless";
+  const haikuViaSdk = runtime.networkUp && runtime.anthropicKeyPresent;
+
+  const buildHaiku = (): RouterProvider =>
+    headless
+      ? new ClaudeHeadlessProvider(config.anthropic.routerModel, {
+          id: "haiku",
+          bin: config.claudeCode.bin,
+        })
+      : new AnthropicHaikuProvider(config.anthropic.routerModel);
+
+  if (preferHaiku && (headless ? runtime.networkUp : haikuViaSdk)) {
+    return buildHaiku();
+  }
+  if (runtime.ollamaReachable) {
+    return new OllamaProvider(config.ollama.baseUrl, config.ollama.model);
+  }
+  // Last resort: return the Haiku transport and let the call surface a clear error.
+  return buildHaiku();
+}
+
+/** Cheap synchronous probe of routing-brain availability from the environment. */
+export function probeRuntime(): ModelRuntimeContext {
+  return {
+    networkUp: true,
+    anthropicKeyPresent: Boolean(process.env[config.anthropic.apiKeyEnv]),
+    // Real reachability is async; the demo script overrides this with a live probe.
+    ollamaReachable: false,
+  };
+}

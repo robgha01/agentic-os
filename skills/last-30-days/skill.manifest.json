@@ -1,0 +1,17 @@
+{
+  "id": "last-30-days",
+  "name": "Last 30 Days Deep Research",
+  "description": "Scrapes high-signal platforms (Reddit, X, YouTube transcripts, Hacker News, repos) and compiles a deep contextual brief on a topic for the trailing 30 days.",
+  "triggers": ["last-30-days"],
+  "modelPolicy": {
+    "execTier": "heavy",
+    "privacy": "cloud-ok"
+  },
+  "execution": {
+    "kind": "claude-headless",
+    "promptTemplate": "Run a Last-30-Days deep research brief on: {{topic}}. Scrape high-signal sources, then write a cited markdown brief.",
+    "args": ["--model", "claude-opus-4-8"]
+  },
+  "vaultOutput": "research/{{topic}}.md",
+  "staleAfterMinutes": 1440
+}

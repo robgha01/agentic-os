@@ -1,0 +1,16 @@
+{
+  "name": "agentic-os",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Localized, voice-driven Agentic OS — HUD + routing engine + headless claude -p skills + Obsidian memory.",
+  "workspaces": [
+    "packages/*",
+    "services/gateway",
+    "apps/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck -w @aos/gateway",
+    "route-demo": "npm run route-demo -w @aos/gateway"
+  }
+}

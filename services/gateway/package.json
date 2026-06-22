@@ -1,0 +1,20 @@
+{
+  "name": "@aos/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agentic OS orchestrator: routing engine, model selection, skill dispatch, HUD feed.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "route-demo": "tsx scripts/route-demo.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@aos/shared": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

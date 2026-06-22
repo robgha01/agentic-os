@@ -1,0 +1,16 @@
+{
+  "id": "inbox-triage",
+  "name": "Inbox Triage",
+  "description": "Classifies, summarizes, and surfaces action items from unread email. Runs locally for privacy.",
+  "triggers": ["inbox-triage"],
+  "modelPolicy": {
+    "execTier": "light",
+    "privacy": "local-only"
+  },
+  "execution": {
+    "kind": "native",
+    "handler": "inboxTriage"
+  },
+  "vaultOutput": "inbox/triage.md",
+  "staleAfterMinutes": 60
+}
