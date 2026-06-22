@@ -60,6 +60,33 @@ export function Options({ hud }: { hud: HudState }) {
     );
   }
 
+  function Text({ label, k, running, placeholder }: { label: string; k: string; running: string; placeholder?: string }) {
+    return (
+      <div className="opt__row">
+        <span className="opt__key">{label}</span>
+        <input
+          className="opt__select"
+          value={valueOf(k, running)}
+          placeholder={placeholder}
+          onChange={(e) => change(k, e.target.value)}
+        />
+      </div>
+    );
+  }
+
+  // Disabled-provider set (edited overlay > saved > running), and its toggle.
+  const disabledSet = new Set(
+    valueOf("models.disabled", cfg.models.disabled.join(","))
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  const toggleProvider = (id: string) => {
+    if (disabledSet.has(id)) disabledSet.delete(id);
+    else disabledSet.add(id);
+    change("models.disabled", [...disabledSet].join(","));
+  };
+
   return (
     <div className="options">
       <h1 className="options__title">Options</h1>
@@ -72,12 +99,53 @@ export function Options({ hud }: { hud: HudState }) {
 
       <section className="opt">
         <h2 className="opt__h">Routing</h2>
-        <Select label="Router brain" k="router.defaultProvider" running={cfg.router.defaultProvider} options={["haiku", "llama3"]} />
+        <Select label="Router brain" k="router.defaultProvider" running={cfg.router.defaultProvider} options={["haiku", "ollama", "openai"]} />
         <Select label="Claude transport" k="router.transport" running={cfg.router.transport} options={["sdk", "headless"]} />
         <p className="opt__hint">
-          <code>sdk</code> uses the Anthropic API (needs <code>ANTHROPIC_API_KEY</code>);
-          <code> headless</code> runs a hidden <code>claude -p</code> session (local Claude Code login).
-          This transport also powers research synthesis.
+          The brain orchestrates fast routing only — it never runs skill work, and
+          skills can't change it. <code>sdk</code> uses the Anthropic API (needs a key);
+          <code> headless</code> runs a hidden <code>claude -p</code> session (local login, no key).
+          If the chosen brain isn't ready it falls back automatically.
+        </p>
+      </section>
+
+      <section className="opt">
+        <h2 className="opt__h">Models &amp; providers</h2>
+        <p className="opt__hint">
+          Skills pick their execution model by policy; the selector keeps the first
+          <em> ready &amp; enabled</em> provider in the fallback order. Toggle a provider off
+          to keep it out of selection even when it's set up.
+        </p>
+        {cfg.providers.map((p) => {
+          const enabled = !disabledSet.has(p.id);
+          const state = !p.configured ? "not set up" : !p.reachable ? "unreachable" : "ready";
+          return (
+            <div className="opt__row" key={p.id}>
+              <span className="opt__key">
+                {p.label}
+                <span className={`opt__chip ${p.reachable && p.configured ? "opt__chip--on" : ""}`}>{state}</span>
+                <span className="opt__sub">{p.kind} · {p.model}</span>
+              </span>
+              <button
+                className={`opt__toggle ${enabled ? "opt__toggle--on" : ""}`}
+                role="switch"
+                aria-checked={enabled}
+                onClick={() => toggleProvider(p.id)}
+              >
+                <span className="opt__toggleknob" /> {enabled ? "enabled" : "disabled"}
+              </button>
+            </div>
+          );
+        })}
+        <Text label="Fallback order" k="models.fallbackOrder" running={cfg.models.fallbackOrder.join(",")} placeholder="claude-code,openai,ollama,haiku" />
+        <Text label="OpenAI base URL" k="openai.baseUrl" running={cfg.openai.baseUrl} placeholder="https://api.openai.com/v1" />
+        <Text label="OpenAI model" k="openai.model" running={cfg.openai.model} placeholder="gpt-4o-mini" />
+        <Text label="Ollama base URL" k="ollama.baseUrl" running={cfg.ollama.baseUrl} placeholder="http://localhost:11434" />
+        <Text label="Ollama model" k="ollama.model" running={cfg.ollama.model} placeholder="llama3:8b" />
+        <p className="opt__hint">
+          The OpenAI provider speaks any OpenAI-compatible endpoint — local (LM Studio,
+          vLLM, llama.cpp) or remote (OpenRouter, Together, Groq, OpenAI). Set its key
+          under Secrets below.
         </p>
       </section>
 
@@ -122,6 +190,7 @@ export function Options({ hud }: { hud: HudState }) {
           never shown again or sent back. Applied live on save.
         </p>
         <SecretField label="Anthropic API key" k="anthropic.apiKey" present={!!cfg.secrets["anthropic.apiKey"]} hud={hud} onSaved={() => setDirty(true)} />
+        <SecretField label="OpenAI API key" k="openai.apiKey" present={!!cfg.secrets["openai.apiKey"]} hud={hud} onSaved={() => setDirty(true)} />
         <SecretField label="Outlook static token" k="mail.token" present={!!cfg.secrets["mail.token"]} hud={hud} onSaved={() => setDirty(true)} />
       </section>
 

@@ -82,10 +82,21 @@ export function selectModel(
   };
 }
 
+/** Enabled + configured + reachable check per provider — drops anything unusable. */
 function isAvailable(p: ModelProfile, ctx: ModelRuntimeContext): boolean {
-  if (p.kind === "local") return ctx.ollamaReachable;
-  // cloud
-  return ctx.networkUp && ctx.anthropicKeyPresent;
+  if (ctx.disabled.includes(p.id)) return false; // user switched it off
+  switch (p.id) {
+    case "ollama":
+      return ctx.ollamaReachable; // configured by default; gate on the daemon being up
+    case "openai":
+      return ctx.networkUp && ctx.openaiConfigured; // needs a key + endpoint
+    case "haiku":
+    case "claude-code":
+      // headless uses the local Claude Code login (no key); sdk needs the key.
+      return ctx.networkUp && (ctx.transport === "headless" || ctx.anthropicKeyPresent);
+    default:
+      return false;
+  }
 }
 
 function rank(order: readonly ProviderId[], id: ProviderId): number {

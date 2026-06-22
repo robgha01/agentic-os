@@ -424,6 +424,22 @@ a { color: var(--magenta); }
   border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; margin-left: 6px;
 }
 .opt__chip--on { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 50%, var(--line)); }
+.opt__sub { display: block; font-size: 9px; color: var(--mute); margin-top: 3px; }
+.opt__toggle {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--mute); background: none; border: none; padding: 0;
+}
+.opt__toggleknob {
+  width: 26px; height: 14px; border-radius: 999px; background: var(--line); position: relative; transition: background 0.2s;
+}
+.opt__toggleknob::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--bg); transition: transform 0.2s;
+}
+.opt__toggle--on { color: var(--ink); }
+.opt__toggle--on .opt__toggleknob { background: var(--magenta); }
+.opt__toggle--on .opt__toggleknob::after { transform: translateX(12px); }
 .opt__banner {
   border: 1px solid color-mix(in srgb, var(--cyan) 50%, var(--line));
   background: color-mix(in srgb, var(--cyan) 10%, transparent);

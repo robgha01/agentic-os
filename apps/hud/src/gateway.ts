@@ -31,11 +31,25 @@ export interface VaultDoc {
 }
 
 /** Sanitized gateway configuration for the Options view. */
+export interface ProviderStatus {
+  id: string;
+  label: string;
+  kind: string;
+  configured: boolean;
+  reachable: boolean;
+  enabled: boolean;
+  model: string;
+}
+
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
   voice: { mode: string; announce: boolean; stt: string; tts: string };
   mail: { provider: string; tokenSource: string; signedIn: boolean };
   research: { sources: { id: string; label: string; auth: string }[] };
+  providers: ProviderStatus[];
+  models: { fallbackOrder: string[]; disabled: string[] };
+  openai: { baseUrl: string; model: string };
+  ollama: { baseUrl: string; model: string };
   vault: { path: string };
   /** Last-saved settings overlay (may differ from running until restart). */
   saved: Record<string, string>;

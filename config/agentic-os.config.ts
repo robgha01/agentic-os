@@ -39,7 +39,7 @@ function oneOf<T extends string>(value: string, allowed: readonly T[], fallback:
 
 export interface AgenticOsConfig {
   router: {
-    defaultProvider: "haiku" | "llama3";
+    defaultProvider: "haiku" | "ollama" | "openai";
     transport: "sdk" | "headless";
     minConfidence: number;
   };
@@ -53,6 +53,13 @@ export interface AgenticOsConfig {
     apiKey?: string;
   };
   ollama: { baseUrl: string; model: string };
+  /** OpenAI-compatible endpoint (local OR remote): any /v1/chat/completions server. */
+  openai: { baseUrl: string; model: string; apiKey?: string };
+  /**
+   * Skill-execution provider preference (`fallbackOrder`, first ready wins) and
+   * the set of providers the user has switched off (`disabled`, never chosen).
+   */
+  models: { fallbackOrder: string[]; disabled: string[] };
   vault: { path: string; managedBlocks: boolean };
   ports: { gateway: number; voice: number };
   budgets: { defaultMaxLatencyMs: number; defaultMaxCostUsd: number };
@@ -86,10 +93,8 @@ function build(): AgenticOsConfig {
   return {
   router: {
     defaultProvider: oneOf(
-      cfg("router.defaultProvider", "AGENTIC_OS_ROUTER", "haiku") === "ollama"
-        ? "llama3"
-        : cfg("router.defaultProvider", "AGENTIC_OS_ROUTER", "haiku"),
-      ["haiku", "llama3"],
+      cfg("router.defaultProvider", "AGENTIC_OS_ROUTER", "haiku"),
+      ["haiku", "ollama", "openai"],
       "haiku",
     ),
     transport: oneOf(cfg("router.transport", "AGENTIC_OS_ROUTER_TRANSPORT", "sdk"), ["sdk", "headless"], "sdk"),
@@ -107,6 +112,23 @@ function build(): AgenticOsConfig {
   ollama: {
     baseUrl: cfg("ollama.baseUrl", "OLLAMA_BASE_URL", "http://localhost:11434"),
     model: cfg("ollama.model", "OLLAMA_MODEL", "llama3:8b"),
+  },
+  openai: {
+    baseUrl: cfg("openai.baseUrl", "OPENAI_BASE_URL", "https://api.openai.com/v1"),
+    model: cfg("openai.model", "OPENAI_MODEL", "gpt-4o-mini"),
+    apiKey: cfgOpt("openai.apiKey", "OPENAI_API_KEY"),
+  },
+  models: {
+    // Skill-execution preference; the selector keeps the first ready provider.
+    // Headless Claude first (no key needed), then OpenAI, then local, then haiku.
+    fallbackOrder: cfg("models.fallbackOrder", "AGENTIC_OS_MODEL_FALLBACK", "claude-code,openai,ollama,haiku")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    disabled: cfg("models.disabled", "AGENTIC_OS_MODEL_DISABLED", "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   },
   vault: {
     path: cfg("vault.path", "AGENTIC_OS_VAULT_PATH", join(REPO_ROOT, "vault")),

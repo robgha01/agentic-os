@@ -26,6 +26,9 @@ async function main(): Promise<void> {
     networkUp: true,
     anthropicKeyPresent: Boolean(process.env[config.anthropic.apiKeyEnv]),
     ollamaReachable: await probeOllama(),
+    openaiConfigured: Boolean(config.openai.apiKey),
+    transport: config.router.transport,
+    disabled: [],
   };
 
   console.log("=== Agentic OS — routing engine smoke demo ===");
@@ -81,6 +84,9 @@ async function main(): Promise<void> {
     networkUp: true,
     anthropicKeyPresent: true,
     ollamaReachable: true,
+    openaiConfigured: true,
+    transport: "sdk",
+    disabled: [],
   };
   for (const { label, policy } of cases) {
     try {

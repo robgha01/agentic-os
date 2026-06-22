@@ -17,6 +17,7 @@ import { spawn } from "node:child_process";
 import type { ModelSelection, OperationResult, RoutedIntent, SkillManifest } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import { EventBus, now } from "../bus/event-bus.js";
+import { createLlmForSelection } from "../llm/llm-service.js";
 import { NATIVE_HANDLERS, type SkillServices } from "./native-registry.js";
 import type { SkillLoader } from "./skill-loader.js";
 
@@ -49,9 +50,19 @@ export class SkillRuntime {
     opId: string,
   ): Promise<void> {
     const context: Record<string, unknown> = {};
-    const result = await this.runOne(skill, intent, selection, context, opId);
+    // Use the skill-selected brain for this op's LLM work; fall back to the
+    // globally-injected default when the policy resolved no selection.
+    const services = this.servicesFor(selection);
+    const result = await this.runOne(skill, intent, selection, context, opId, services);
     if (result.ok) this.complete(opId, result.exitCode, context.result as OperationResult | undefined);
     else this.fail(opId, result.error ?? `exit ${result.exitCode}`);
+  }
+
+  /** Per-op services with the LLM resolved from the selection (or the default). */
+  private servicesFor(selection: ModelSelection | null): SkillServices {
+    if (!selection) return this.services;
+    const llm = createLlmForSelection(selection) ?? this.services.llm;
+    return { ...this.services, llm };
   }
 
   /** Execute one skill (recursively for composites). Streams output; no lifecycle. */
@@ -61,6 +72,7 @@ export class SkillRuntime {
     selection: ModelSelection | null,
     context: Record<string, unknown>,
     opId: string,
+    services: SkillServices,
   ): Promise<StepResult> {
     const exec = skill.execution;
 
@@ -86,7 +98,7 @@ export class SkillRuntime {
             intent,
             params: intent.parameters,
             context,
-            services: this.services,
+            services,
             emit: (chunk) => this.output(opId, "stdout", chunk),
           });
           return { ok: code === 0, exitCode: code };
@@ -100,7 +112,7 @@ export class SkillRuntime {
           const step = this.loader.get(stepId);
           if (!step) return { ok: false, exitCode: null, error: `composite step "${stepId}" not found` };
           this.output(opId, "stdout", `▸ step: ${step.id}\n`);
-          const r = await this.runOne(step, intent, selection, context, opId);
+          const r = await this.runOne(step, intent, selection, context, opId, services);
           if (!r.ok) {
             return { ok: false, exitCode: r.exitCode, error: `step "${step.id}" failed: ${r.error ?? `exit ${r.exitCode}`}` };
           }

@@ -15,7 +15,7 @@ import { EventBus, now } from "./bus/event-bus.js";
 import { GatewayServer } from "./bus/ws-server.js";
 import { Dispatcher } from "./dispatch/dispatcher.js";
 import { Router } from "./routing/router.js";
-import { detectRuntime } from "./runtime.js";
+import { detectRuntime, providerReadiness } from "./runtime.js";
 import { SkillLoader } from "./skills/skill-loader.js";
 import { SkillRuntime } from "./skills/skill-runtime.js";
 import type { SkillServices } from "./skills/native-registry.js";
@@ -94,8 +94,15 @@ async function main(): Promise<void> {
     console.log(`[gateway] config applied — transport=${config.router.transport} voice=${config.voice.mode} mail=${config.mail.provider}`);
   }
 
-  const server = new GatewayServer(bus, dispatcher, loader, vault, config.ports.gateway, applyConfig, (text) =>
-    void speaker.say(text),
+  const server = new GatewayServer(
+    bus,
+    dispatcher,
+    loader,
+    vault,
+    config.ports.gateway,
+    applyConfig,
+    (text) => void speaker.say(text),
+    () => providerReadiness(runtime),
   );
   await server.start();
 

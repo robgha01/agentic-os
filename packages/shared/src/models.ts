@@ -8,8 +8,14 @@
  */
 import { z } from "zod";
 
-/** Concrete providers the OS knows how to drive. Extend the registry to add more. */
-export type ProviderId = "haiku" | "llama3" | "claude-code";
+/**
+ * Concrete providers the OS knows how to drive. Extend the registry to add more.
+ *  - haiku       : cheap/fast Anthropic model (router default + light skill tier)
+ *  - claude-code : strong Anthropic model via headless `claude -p` (no API key)
+ *  - ollama      : any local Ollama-served model (native /api/chat)
+ *  - openai      : any OpenAI-compatible endpoint (local or remote; key + baseUrl)
+ */
+export type ProviderId = "haiku" | "ollama" | "openai" | "claude-code";
 
 /**
  * How much "brain" a task needs:
@@ -33,7 +39,7 @@ export const ModelPolicySchema = z.object({
   /** Upper bound on acceptable per-call cost, in USD. */
   maxCostUsd: z.number().nonnegative().optional(),
   /** Hard override — bypasses the entire cascade and uses exactly this provider. */
-  pin: z.enum(["haiku", "llama3", "claude-code"]).optional(),
+  pin: z.enum(["haiku", "ollama", "openai", "claude-code"]).optional(),
 });
 export type ModelPolicy = z.infer<typeof ModelPolicySchema>;
 
@@ -51,11 +57,31 @@ export interface ModelProfile {
   approxCostPer1kUsd: number;
 }
 
-/** Live signals the selector consults to drop unreachable providers. */
+/** Live signals the selector consults to drop unconfigured/unreachable providers. */
 export interface ModelRuntimeContext {
   ollamaReachable: boolean;
   networkUp: boolean;
   anthropicKeyPresent: boolean;
+  /** OpenAI-compatible endpoint has a key configured. */
+  openaiConfigured: boolean;
+  /** How Anthropic is reached: "headless" needs no key, "sdk" needs one. */
+  transport: "sdk" | "headless";
+  /** Providers the user has switched off — never selected, even if ready. */
+  disabled: ProviderId[];
+}
+
+/** Per-provider readiness for the HUD ("can I actually use this right now?"). */
+export interface ProviderReadiness {
+  id: ProviderId;
+  label: string;
+  kind: "cloud" | "local";
+  /** Required setup is present (key/login). */
+  configured: boolean;
+  /** Live/likely reachable right now. */
+  reachable: boolean;
+  /** User switch — off providers are never selected. */
+  enabled: boolean;
+  model: string;
 }
 
 /** The selector's verdict. `null` from selectModel means "no LLM needed". */

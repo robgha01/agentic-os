@@ -17,12 +17,20 @@ export const MODEL_REGISTRY: readonly ModelProfile[] = [
     approxCostPer1kUsd: 0.001,
   },
   {
-    id: "llama3",
+    id: "ollama",
     kind: "local",
-    model: config.ollama.model, // llama3:8b
-    tiers: ["light"],
+    model: config.ollama.model, // e.g. llama3:8b — any local Ollama model
+    tiers: ["light", "heavy"],
     typicalLatencyMs: 1500,
     approxCostPer1kUsd: 0,
+  },
+  {
+    id: "openai",
+    kind: "cloud", // "cloud" by selection semantics; may point at a LOCAL OpenAI-compatible server
+    model: config.openai.model, // any OpenAI-compatible model
+    tiers: ["light", "heavy"],
+    typicalLatencyMs: 1200,
+    approxCostPer1kUsd: 0.005,
   },
   {
     id: "claude-code",
@@ -34,5 +42,16 @@ export const MODEL_REGISTRY: readonly ModelProfile[] = [
   },
 ];
 
-/** Tie-break order when multiple providers survive the cascade. Lower = preferred. */
-export const FALLBACK_ORDER: readonly ProviderId[] = ["haiku", "llama3", "claude-code"];
+/**
+ * Tie-break / fallback order when multiple providers survive the cascade
+ * (lower = preferred). Configurable via models.fallbackOrder; unknown ids are
+ * dropped and any registry providers omitted from config are appended.
+ */
+export const FALLBACK_ORDER: readonly ProviderId[] = (() => {
+  const ids = MODEL_REGISTRY.map((p) => p.id);
+  const configured = config.models.fallbackOrder.filter((id): id is ProviderId =>
+    (ids as string[]).includes(id),
+  );
+  const rest = ids.filter((id) => !configured.includes(id));
+  return [...configured, ...rest];
+})();

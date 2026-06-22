@@ -39,11 +39,17 @@ export const EDITABLE_KEYS = [
   "voice.stt.provider",
   "mail.provider",
   "mail.tokenSource",
+  "openai.baseUrl",
+  "openai.model",
+  "ollama.baseUrl",
+  "ollama.model",
+  "models.fallbackOrder",
+  "models.disabled",
 ] as const;
 export type EditableKey = (typeof EDITABLE_KEYS)[number];
 
 /** Secret keys — kept in the OS keychain or encrypted; never returned by value. */
-export const SECRET_KEYS = ["anthropic.apiKey", "mail.token", "reddit.clientSecret"] as const;
+export const SECRET_KEYS = ["anthropic.apiKey", "openai.apiKey", "mail.token", "reddit.clientSecret"] as const;
 export type SecretKey = (typeof SECRET_KEYS)[number];
 const SECRET_SET: ReadonlySet<string> = new Set(SECRET_KEYS);
 

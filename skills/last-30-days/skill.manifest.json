@@ -14,7 +14,7 @@
     ]
   },
   "modelPolicy": {
-    "execTier": "none",
+    "execTier": "heavy",
     "privacy": "cloud-ok"
   },
   "execution": {

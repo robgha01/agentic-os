@@ -10,6 +10,7 @@
  */
 import { spawn } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
+import type { ModelSelection } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 
 export interface CompleteOptions {
@@ -91,6 +92,87 @@ class ClaudeHeadlessLlm implements LlmService {
   }
 }
 
+/** Ollama-native (/api/chat) — any local Ollama-served model. */
+class OllamaLlm implements LlmService {
+  readonly id = "ollama";
+  constructor(
+    private readonly baseUrl: string,
+    public readonly model: string,
+    private readonly timeoutMs = 120_000,
+  ) {}
+  async complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
+    const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: this.model,
+        stream: false,
+        messages: [
+          ...(opts.system ? [{ role: "system", content: opts.system }] : []),
+          { role: "user", content: prompt },
+        ],
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`ollama: HTTP ${res.status} from ${this.baseUrl}/api/chat`);
+    const data = (await res.json()) as { message?: { content?: string } };
+    return (data.message?.content ?? "").trim();
+  }
+}
+
+/** OpenAI-compatible (/v1/chat/completions) — any OpenAI-standard server. */
+class OpenAiLlm implements LlmService {
+  readonly id = "openai";
+  constructor(
+    private readonly baseUrl: string,
+    public readonly model: string,
+    private readonly apiKey?: string,
+    private readonly timeoutMs = 120_000,
+  ) {}
+  async complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
+    const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: opts.maxTokens ?? 1500,
+        messages: [
+          ...(opts.system ? [{ role: "system", content: opts.system }] : []),
+          { role: "user", content: prompt },
+        ],
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`openai: HTTP ${res.status} from ${this.baseUrl}/chat/completions`);
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return (data.choices?.[0]?.message?.content ?? "").trim();
+  }
+}
+
+/**
+ * Build the LLM for a resolved ModelSelection — the skill's chosen brain.
+ * Returns undefined if that provider isn't actually usable (e.g. missing key),
+ * so callers degrade gracefully.
+ */
+export function createLlmForSelection(selection: ModelSelection, cfg = config): LlmService | undefined {
+  switch (selection.provider) {
+    case "haiku":
+    case "claude-code":
+      if (cfg.router.transport === "headless") return new ClaudeHeadlessLlm(selection.model, cfg.claudeCode.bin);
+      return cfg.anthropic.apiKey ? new AnthropicSdkLlm(selection.model, cfg.anthropic.apiKey) : undefined;
+    case "ollama":
+      return new OllamaLlm(cfg.ollama.baseUrl, selection.model);
+    case "openai":
+      return cfg.openai.apiKey ? new OpenAiLlm(cfg.openai.baseUrl, selection.model, cfg.openai.apiKey) : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/** Global default LLM (transport-based) — the fallback when a skill resolves no selection. */
 export function createLlmService(cfg = config): LlmService | undefined {
   if (cfg.router.transport === "headless") {
     return new ClaudeHeadlessLlm(cfg.anthropic.heavyModel, cfg.claudeCode.bin);

@@ -25,6 +25,9 @@ const RUNTIME: ModelRuntimeContext = {
   networkUp: true,
   anthropicKeyPresent: false,
   ollamaReachable: false,
+  openaiConfigured: false,
+  transport: "sdk",
+  disabled: [],
 };
 
 function collect(bus: EventBus): OsEvent[] {

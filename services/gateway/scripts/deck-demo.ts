@@ -22,7 +22,7 @@ import { Router } from "../src/routing/router.js";
 import { SkillLoader } from "../src/skills/skill-loader.js";
 import { VaultAdapter } from "../src/memory/vault-adapter.js";
 
-const RUNTIME: ModelRuntimeContext = { networkUp: true, anthropicKeyPresent: false, ollamaReachable: false };
+const RUNTIME: ModelRuntimeContext = { networkUp: true, anthropicKeyPresent: false, ollamaReachable: false, openaiConfigured: false, transport: "sdk", disabled: [] };
 
 function writeManifest(root: string, id: string, manifest: unknown): void {
   mkdirSync(join(root, id), { recursive: true });

@@ -37,6 +37,7 @@ export class GatewayServer {
     private readonly requestedPort: number,
     private readonly onSettingsChange?: () => Promise<void>,
     private readonly speak?: (text: string) => void,
+    private readonly providers?: () => import("@aos/shared").ProviderReadiness[],
   ) {
     // Localhost single-user tool: allow the HUD (served from a dev/other port)
     // to read these GET endpoints cross-origin.
@@ -112,6 +113,11 @@ export class GatewayServer {
                 { id: "reddit", label: "Reddit", auth: "keyless (may rate-limit from some IPs)" },
               ],
             },
+            // Model providers + their live readiness, and the execution preference.
+            providers: this.providers?.() ?? [],
+            models: { fallbackOrder: config.models.fallbackOrder, disabled: config.models.disabled },
+            openai: { baseUrl: config.openai.baseUrl, model: config.openai.model },
+            ollama: { baseUrl: config.ollama.baseUrl, model: config.ollama.model },
             vault: { path: config.vault.path },
             // Saved overlay (what the Options panel last wrote) — may differ from
             // the running values above until the gateway restarts.

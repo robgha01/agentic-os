@@ -14,7 +14,7 @@ interface OllamaChatResponse {
 }
 
 export class OllamaProvider implements RouterProvider {
-  readonly id = "llama3";
+  readonly id = "ollama";
 
   constructor(
     private readonly baseUrl: string,

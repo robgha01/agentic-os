@@ -17,6 +17,7 @@ import type { RouterProvider } from "./semantic/provider.types.js";
 import { AnthropicHaikuProvider } from "./semantic/providers/anthropic-haiku.js";
 import { ClaudeHeadlessProvider } from "./semantic/providers/claude-headless.js";
 import { OllamaProvider } from "./semantic/providers/ollama.js";
+import { OpenAiProvider } from "./semantic/providers/openai.js";
 
 export class Router {
   private readonly catalog: readonly Action[];
@@ -70,26 +71,33 @@ export class Router {
  *   - "sdk": the Anthropic Messages API — needs ANTHROPIC_API_KEY + network.
  */
 export function selectRouterProvider(runtime: ModelRuntimeContext): RouterProvider {
-  const preferHaiku = config.router.defaultProvider === "haiku";
   const headless = config.router.transport === "headless";
-  const haikuViaSdk = runtime.networkUp && runtime.anthropicKeyPresent;
+  const haikuReady = runtime.networkUp && (headless || runtime.anthropicKeyPresent);
 
-  const buildHaiku = (): RouterProvider =>
-    headless
-      ? new ClaudeHeadlessProvider(config.anthropic.routerModel, {
-          id: "haiku",
-          bin: config.claudeCode.bin,
-        })
-      : new AnthropicHaikuProvider(config.anthropic.routerModel, config.anthropic.apiKey);
+  const build: Record<"haiku" | "ollama" | "openai", () => RouterProvider> = {
+    haiku: () =>
+      headless
+        ? new ClaudeHeadlessProvider(config.anthropic.routerModel, { id: "haiku", bin: config.claudeCode.bin })
+        : new AnthropicHaikuProvider(config.anthropic.routerModel, config.anthropic.apiKey),
+    ollama: () => new OllamaProvider(config.ollama.baseUrl, config.ollama.model),
+    openai: () => new OpenAiProvider(config.openai.baseUrl, config.openai.model, config.openai.apiKey),
+  };
+  const off = (id: "haiku" | "ollama" | "openai") => runtime.disabled.includes(id);
+  const ready: Record<"haiku" | "ollama" | "openai", boolean> = {
+    haiku: haikuReady && !off("haiku"),
+    ollama: runtime.ollamaReachable && !off("ollama"),
+    openai: runtime.networkUp && runtime.openaiConfigured && !off("openai"),
+  };
 
-  if (preferHaiku && (headless ? runtime.networkUp : haikuViaSdk)) {
-    return buildHaiku();
+  // Prefer the configured brain; if it isn't ready, fall to the first that is.
+  const preferred = config.router.defaultProvider;
+  const order: ("haiku" | "ollama" | "openai")[] = [preferred, "haiku", "ollama", "openai"];
+  for (const id of order) {
+    if (ready[id]) return build[id]();
   }
-  if (runtime.ollamaReachable) {
-    return new OllamaProvider(config.ollama.baseUrl, config.ollama.model);
-  }
-  // Last resort: return the Haiku transport and let the call surface a clear error.
-  return buildHaiku();
+  // Nothing ready: return the configured brain's transport so the call surfaces
+  // a clear error rather than guessing.
+  return build[preferred]();
 }
 
 /** Cheap synchronous probe of routing-brain availability from the environment. */
@@ -99,5 +107,8 @@ export function probeRuntime(): ModelRuntimeContext {
     anthropicKeyPresent: Boolean(config.anthropic.apiKey),
     // Real reachability is async; the demo script overrides this with a live probe.
     ollamaReachable: false,
+    openaiConfigured: Boolean(config.openai.apiKey),
+    transport: config.router.transport,
+    disabled: config.models.disabled as import("@aos/shared").ProviderId[],
   };
 }
