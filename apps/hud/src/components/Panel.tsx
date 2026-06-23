@@ -1,45 +1,40 @@
 /**
  * A side panel of three drop slots. Each occupied slot shows a widget framed by
- * a draggable header; dragging a header onto another slot swaps them. Empty
- * slots are valid drop targets and quietly invite a widget.
+ * a draggable header; dragging a header onto another slot swaps them. A widget
+ * can be removed back to the palette, and empty slots offer an "add widget"
+ * menu listing every registered widget not currently placed.
  *
- * Widgets that implement the options interface (see widget-options.ts) get a
- * cogwheel in their header; clicking it reveals an inline options panel whose
- * values persist per widget and are passed into the widget's render.
+ * Widgets that declare options (see the registry) get a cogwheel in their header;
+ * clicking it reveals an inline options form whose values persist per widget.
  */
 import { useState } from "react";
 import type { HudState } from "../useGateway.js";
-import { WIDGET_TITLES, type Layout, type SlotId, type WidgetId } from "../layout.js";
+import type { Layout, SlotId } from "../layout.js";
+import { WIDGETS, hasOptions, type WidgetId } from "../widget-registry.js";
 import {
-  WIDGET_OPTIONS,
-  hasOptions,
   loadWidgetOptions,
   resolveOptions,
   saveWidgetOptions,
   type WidgetOptionField,
   type WidgetOptions,
 } from "../widget-options.js";
-import { renderWidget } from "./widgets.js";
 
 interface PanelProps {
   side: "left" | "right";
   slots: SlotId[];
   layout: Layout;
   hud: HudState;
+  unplaced: WidgetId[];
   onMove: (from: SlotId, to: SlotId) => void;
+  onAdd: (slot: SlotId, widget: WidgetId) => void;
+  onRemove: (slot: SlotId) => void;
 }
 
-export function Panel({ side, slots, layout, hud, onMove }: PanelProps) {
+export function Panel({ side, slots, layout, hud, unplaced, onMove, onAdd, onRemove }: PanelProps) {
   const [dragOver, setDragOver] = useState<SlotId | null>(null);
   const [openOpts, setOpenOpts] = useState<SlotId | null>(null);
-  const [opts, setOpts] = useState<Record<string, WidgetOptions>>(() => {
-    const o: Record<string, WidgetOptions> = {};
-    for (const s of slots) {
-      const w = layout[s];
-      if (w && hasOptions(w)) o[w] = loadWidgetOptions(w);
-    }
-    return o;
-  });
+  const [openAdd, setOpenAdd] = useState<SlotId | null>(null);
+  const [opts, setOpts] = useState<Record<string, WidgetOptions>>({});
 
   const setOpt = (w: WidgetId, key: string, value: string | number | boolean) => {
     setOpts((prev) => {
@@ -48,11 +43,13 @@ export function Panel({ side, slots, layout, hud, onMove }: PanelProps) {
       return { ...prev, [w]: next };
     });
   };
+  const optsFor = (w: WidgetId) => resolveOptions(WIDGETS[w].options, opts[w] ?? loadWidgetOptions(w));
 
   return (
     <aside className={`panel panel--${side}`}>
       {slots.map((slot) => {
         const widget = layout[slot];
+        const def = widget ? WIDGETS[widget] : null;
         const optionable = widget ? hasOptions(widget) : false;
         const showOpts = optionable && openOpts === slot;
         return (
@@ -71,7 +68,7 @@ export function Panel({ side, slots, layout, hud, onMove }: PanelProps) {
               if (from) onMove(from, slot);
             }}
           >
-            {widget ? (
+            {widget && def ? (
               <>
                 <header
                   className="slot__head"
@@ -79,7 +76,10 @@ export function Panel({ side, slots, layout, hud, onMove }: PanelProps) {
                   onDragStart={(e) => e.dataTransfer.setData("text/slot", slot)}
                   title="Drag to rearrange"
                 >
-                  <span className="slot__title">{WIDGET_TITLES[widget]}</span>
+                  <span className="slot__titles">
+                    <span className="slot__title">{def.name}</span>
+                    {def.eyebrow ? <span className="slot__eyebrow">{def.eyebrow}</span> : null}
+                  </span>
                   <span className="slot__tools">
                     {optionable ? (
                       <button
@@ -92,20 +92,52 @@ export function Panel({ side, slots, layout, hud, onMove }: PanelProps) {
                         ⚙
                       </button>
                     ) : null}
+                    <button
+                      className="slot__remove"
+                      onClick={() => onRemove(slot)}
+                      title="Remove widget (back to palette)"
+                      aria-label="Remove widget"
+                    >
+                      ✕
+                    </button>
                     <span className="slot__grip" aria-hidden>⠿</span>
                   </span>
                 </header>
-                {showOpts && widget ? (
+                {showOpts ? (
                   <WidgetOptionsPanel
-                    fields={WIDGET_OPTIONS[widget]!}
-                    values={resolveOptions(widget, opts[widget])}
+                    fields={def.options!}
+                    values={optsFor(widget)}
                     onChange={(k, v) => setOpt(widget, k, v)}
                   />
                 ) : null}
-                <div className="slot__body">{renderWidget(widget, hud, resolveOptions(widget, opts[widget]))}</div>
+                <div className="slot__body">{def.render(hud, optsFor(widget))}</div>
               </>
             ) : (
-              <div className="slot__placeholder">drop a widget</div>
+              <div className="slot__add">
+                <button className="slot__addbtn" onClick={() => setOpenAdd((s) => (s === slot ? null : slot))}>
+                  + add widget
+                </button>
+                {openAdd === slot ? (
+                  <ul className="slot__menu">
+                    {unplaced.length === 0 ? (
+                      <li className="slot__menu-empty">all widgets placed</li>
+                    ) : (
+                      unplaced.map((id) => (
+                        <li key={id}>
+                          <button
+                            onClick={() => {
+                              onAdd(slot, id);
+                              setOpenAdd(null);
+                            }}
+                          >
+                            {WIDGETS[id].name}
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                ) : null}
+              </div>
             )}
           </section>
         );

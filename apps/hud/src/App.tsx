@@ -13,7 +13,8 @@ import { DocViewer } from "./components/DocViewer.js";
 import { ContextCards } from "./components/ContextCards.js";
 import { Options } from "./components/Options.js";
 import { useGateway } from "./useGateway.js";
-import { loadLayout, moveWidget, saveLayout, type Layout, type SlotId } from "./layout.js";
+import { loadLayout, moveWidget, saveLayout, unplacedWidgets, type Layout, type SlotId } from "./layout.js";
+import type { WidgetId } from "./widget-registry.js";
 
 const CORE_LABEL: Record<string, string> = {
   idle: "standing by",
@@ -35,6 +36,24 @@ export function App() {
     });
   }, []);
 
+  const onAdd = useCallback((slot: SlotId, widget: WidgetId) => {
+    setLayout((prev) => {
+      const next = { ...prev, [slot]: widget };
+      saveLayout(next);
+      return next;
+    });
+  }, []);
+
+  const onRemove = useCallback((slot: SlotId) => {
+    setLayout((prev) => {
+      const next = { ...prev, [slot]: null };
+      saveLayout(next);
+      return next;
+    });
+  }, []);
+
+  const unplaced = unplacedWidgets(layout);
+
   return (
     <div className="app">
       <TopBar hud={hud} view={view} onNav={setView} />
@@ -42,7 +61,7 @@ export function App() {
       {view === "dashboard" ? (
         <div className="dash">
           <main className="stage">
-            <Panel side="left" slots={["left-top", "left-mid", "left-bottom"]} layout={layout} hud={hud} onMove={onMove} />
+            <Panel side="left" slots={["left-top", "left-mid", "left-bottom"]} layout={layout} hud={hud} unplaced={unplaced} onMove={onMove} onAdd={onAdd} onRemove={onRemove} />
 
             <section className="center">
               <div className="core-stage">
@@ -57,7 +76,7 @@ export function App() {
               ) : null}
             </section>
 
-            <Panel side="right" slots={["right-top", "right-mid", "right-bottom"]} layout={layout} hud={hud} onMove={onMove} />
+            <Panel side="right" slots={["right-top", "right-mid", "right-bottom"]} layout={layout} hud={hud} unplaced={unplaced} onMove={onMove} onAdd={onAdd} onRemove={onRemove} />
           </main>
 
           <CommandBar hud={hud} />

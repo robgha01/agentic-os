@@ -1,11 +1,10 @@
 /**
- * The HUD widgets. Each takes the live HudState and renders one panel body.
- * `renderWidget` maps a WidgetId to its component so panels stay generic.
+ * The HUD widget components. Each takes the live HudState (and optional resolved
+ * options) and renders one panel body. They're wired to ids in widget-registry.
  */
 import { useEffect, useState } from "react";
 import type { SkillCard } from "@aos/shared";
 import type { HudState, OperationView } from "../useGateway.js";
-import type { WidgetId } from "../layout.js";
 import type { WidgetOptions } from "../widget-options.js";
 
 function timeOf(iso: string): string {
@@ -25,7 +24,7 @@ function Sparkline({ data }: { data: number[] }) {
   );
 }
 
-function VitalMetrics({ hud }: { hud: HudState }) {
+export function VitalMetrics({ hud }: { hud: HudState }) {
   const stat = (label: string, value: string | number) => (
     <div className="metric" key={label}>
       <div className="metric__value">{value}</div>
@@ -49,7 +48,7 @@ function statusGlyph(o: OperationView): string {
   return o.status === "running" ? "◍" : o.status === "done" ? "●" : "✕";
 }
 
-function OperationsLog({ hud }: { hud: HudState }) {
+export function OperationsLog({ hud }: { hud: HudState }) {
   const active = hud.operations[0];
   if (!active) return <Empty>No operations yet. Run a skill or type a command.</Empty>;
   return (
@@ -109,7 +108,7 @@ function DeckCard({ card, hud }: { card: SkillCard; hud: HudState }) {
   );
 }
 
-function CommandDeck({ hud }: { hud: HudState }) {
+export function CommandDeck({ hud }: { hud: HudState }) {
   if (hud.skills.length === 0) {
     return <Empty>{hud.status === "online" ? "No command skills available." : "Connecting to gateway…"}</Empty>;
   }
@@ -122,7 +121,7 @@ function CommandDeck({ hud }: { hud: HudState }) {
   );
 }
 
-function VaultFeed({ hud }: { hud: HudState }) {
+export function VaultFeed({ hud }: { hud: HudState }) {
   if (hud.records.length === 0) return <Empty>Records the OS writes to the vault appear here. Click one to open it.</Empty>;
   return (
     <ul className="feed">
@@ -139,7 +138,7 @@ function VaultFeed({ hud }: { hud: HudState }) {
   );
 }
 
-function Schedule() {
+export function Schedule() {
   return <Empty>No scheduled items. Morning brief and events surface here once the vault has them.</Empty>;
 }
 
@@ -148,7 +147,7 @@ function Schedule() {
  * mode and result auto-announce, toggled inline (persisted + applied live) so
  * you don't have to open Options. Hold-to-talk drives the listening state.
  */
-function AudioIO({ hud }: { hud: HudState }) {
+export function AudioIO({ hud }: { hud: HudState }) {
   const [voice, setVoice] = useState(false);
   const [announce, setAnnounce] = useState(true);
   const fetchConfig = hud.fetchConfig;
@@ -246,7 +245,7 @@ function wireBullets(body: string): string[] {
 }
 
 /** AI Wire — a terse AI-industry intel brief from the newest `intel` record. */
-function AiWire({ hud, options }: { hud: HudState; options?: WidgetOptions }) {
+export function AiWire({ hud, options }: { hud: HudState; options?: WidgetOptions }) {
   const max = Number(options?.max ?? 8);
   const topic = String(options?.topic ?? "").trim();
   const rec = hud.records.find((r) => r.type === "intel");
@@ -295,21 +294,3 @@ function AiWire({ hud, options }: { hud: HudState; options?: WidgetOptions }) {
   );
 }
 
-export function renderWidget(id: WidgetId, hud: HudState, options?: WidgetOptions) {
-  switch (id) {
-    case "vitals":
-      return <VitalMetrics hud={hud} />;
-    case "operations":
-      return <OperationsLog hud={hud} />;
-    case "deck":
-      return <CommandDeck hud={hud} />;
-    case "vault":
-      return <VaultFeed hud={hud} />;
-    case "schedule":
-      return <Schedule />;
-    case "audio":
-      return <AudioIO hud={hud} />;
-    case "ai-wire":
-      return <AiWire hud={hud} options={options} />;
-  }
-}

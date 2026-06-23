@@ -1,9 +1,12 @@
 /**
  * Widget layout — the panels are drag-arrangeable. Six slots (top/middle/bottom
- * on each side) each hold one widget (or nothing). A default layout ships; the
- * user's arrangement persists to localStorage.
+ * on each side) each hold one widget (or nothing). The default layout is derived
+ * from each widget's `defaultSlot` in the registry; the user's arrangement
+ * persists to localStorage. Widgets with no slot live in the add-widget palette.
  */
-export type WidgetId = "vitals" | "operations" | "deck" | "vault" | "schedule" | "audio" | "ai-wire";
+import { ALL_WIDGET_IDS, WIDGETS, type WidgetId } from "./widget-registry.js";
+
+export type { WidgetId };
 
 export type SlotId =
   | "left-top"
@@ -17,35 +20,38 @@ export const SLOTS: SlotId[] = ["left-top", "left-mid", "left-bottom", "right-to
 
 export type Layout = Record<SlotId, WidgetId | null>;
 
-export const WIDGET_TITLES: Record<WidgetId, string> = {
-  vitals: "System status",
-  operations: "Operations",
-  deck: "Command deck",
-  vault: "V.A.U.L.T. feed",
-  schedule: "Schedule",
-  audio: "Audio I/O",
-  "ai-wire": "AI Wire",
-};
+/** Built from each widget's declared `defaultSlot`. */
+export const DEFAULT_LAYOUT: Layout = (() => {
+  const layout: Layout = {
+    "left-top": null,
+    "left-mid": null,
+    "left-bottom": null,
+    "right-top": null,
+    "right-mid": null,
+    "right-bottom": null,
+  };
+  for (const id of ALL_WIDGET_IDS) {
+    const slot = WIDGETS[id].defaultSlot;
+    if (slot && layout[slot] === null) layout[slot] = id;
+  }
+  return layout;
+})();
 
-export const DEFAULT_LAYOUT: Layout = {
-  "left-top": "vitals",
-  "left-mid": "ai-wire",
-  "left-bottom": "audio",
-  "right-top": "deck",
-  "right-mid": "vault",
-  "right-bottom": "operations",
-};
-
-// v3: added the AI Wire widget to the default layout.
-const STORAGE_KEY = "aos.hud.layout.v3";
+// v4: registry-derived layout + add-widget palette.
+const STORAGE_KEY = "aos.hud.layout.v4";
 
 export function loadLayout(): Layout {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_LAYOUT };
     const parsed = JSON.parse(raw) as Partial<Layout>;
-    // Merge over defaults so new slots/widgets survive upgrades.
-    return { ...DEFAULT_LAYOUT, ...parsed };
+    // Merge over defaults, dropping any unknown widget ids (renamed/removed).
+    const merged = { ...DEFAULT_LAYOUT, ...parsed };
+    for (const slot of SLOTS) {
+      const w = merged[slot];
+      if (w && !(w in WIDGETS)) merged[slot] = null;
+    }
+    return merged;
   } catch {
     return { ...DEFAULT_LAYOUT };
   }
@@ -63,4 +69,10 @@ export function saveLayout(layout: Layout): void {
 export function moveWidget(layout: Layout, from: SlotId, to: SlotId): Layout {
   if (from === to) return layout;
   return { ...layout, [to]: layout[from], [from]: layout[to] };
+}
+
+/** Widget ids not currently placed in any slot — the add-widget palette. */
+export function unplacedWidgets(layout: Layout): WidgetId[] {
+  const placed = new Set(SLOTS.map((s) => layout[s]).filter(Boolean));
+  return ALL_WIDGET_IDS.filter((id) => !placed.has(id));
 }
