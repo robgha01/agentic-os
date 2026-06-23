@@ -88,12 +88,17 @@ export function buildResultDocument(input: ResultDocumentInput): BuiltDocument {
     parts.push(`## Sources\n\n${list}`);
   }
 
-  // Contextual backlinks as in-body [[wikilinks]] so Obsidian's graph connects
-  // this node to related notes (the frontmatter `links` field alone doesn't).
-  if (input.links && input.links.length > 0) {
-    const links = input.links.map((l) => `[[${l}]]`).join(" · ");
-    parts.push(`## Related\n\n${links}`);
-  }
+  // Categorization: every record is tagged with its `type` plus its specific
+  // tags, so Obsidian groups it meaningfully (not just by date). Deduped.
+  const tags = [...new Set([input.type, ...(input.tags ?? [])])];
+
+  // Related footer = the category tags (as nested #tags) + any explicit links
+  // (e.g. the daily-note backlink), so the note is actually categorized in
+  // Obsidian's graph/tag panes rather than only pointing at a date.
+  const tagLine = tags.map((t) => `#${t}`).join(" ");
+  const linkLine = (input.links ?? []).map((l) => `[[${l}]]`).join(" · ");
+  const related = [tagLine, linkLine].filter(Boolean).join("\n\n");
+  if (related) parts.push(`## Related\n\n${related}`);
 
   // Provenance lives in the frontmatter (source/model/status/confidence), so the
   // body stays human-first — no footer.
@@ -110,7 +115,7 @@ export function buildResultDocument(input: ResultDocumentInput): BuiltDocument {
     status,
     confidence: input.confidence,
     staleAfterMinutes: input.staleAfterMinutes,
-    tags: input.tags ?? [],
+    tags,
     inputs: input.inputs ?? {},
     model: input.model,
     links: input.links ?? [],
