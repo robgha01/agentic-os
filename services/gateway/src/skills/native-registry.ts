@@ -52,6 +52,22 @@ interface ResearchItem {
 
 const THIRTY_DAYS_SEC = 30 * 24 * 60 * 60;
 
+/**
+ * Split a trailing "TAGS: a, b, c" line off an LLM response, returning the body
+ * without it plus up to 6 kebab-case tags. Lets the model categorize its own
+ * result (per-result tags) without a second call.
+ */
+function splitTags(text: string): { body: string; tags: string[] } {
+  const m = text.match(/^[ \t>*-]*tags?\s*:\s*(.+)$/im);
+  if (!m) return { body: text.trim(), tags: [] };
+  const tags = (m[1] ?? "")
+    .split(/[,#]/)
+    .map((t) => t.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""))
+    .filter(Boolean)
+    .slice(0, 6);
+  return { body: text.replace(m[0], "").trim(), tags };
+}
+
 /** Push items + a search-link source onto the shared context. */
 function collect(ctx: NativeHandlerContext, items: ResearchItem[], source: SourceRef): void {
   const existing = (ctx.context.researchItems as ResearchItem[] | undefined) ?? [];
@@ -178,15 +194,18 @@ const synthesizeResearch: NativeHandler = async (ctx) => {
     `**Friction** — then a bulleted list of criticism / failures / losing traction, each citing [n]. If none appear in the items, write "Not evident in the last 30 days of items."`,
     ``,
     `Do not use markdown headings. Every claim must trace to an item. Do not invent sources.`,
+    `On the very last line, output "TAGS:" then 3–6 short kebab-case topic tags (comma-separated, no # prefix) capturing the themes.`,
   ].join("\n");
 
   try {
     const out = await ctx.services.llm.complete(prompt, { system, maxTokens: 1200 });
     if (out && out.trim()) {
-      ctx.context.synthesis = out.trim();
+      const { body, tags } = splitTags(out.trim());
+      ctx.context.synthesis = body;
+      ctx.context.synthTags = tags;
       // Record which brain produced the analysis, for the doc's provenance.
       ctx.context.synthModel = `${ctx.services.llm.model} (${ctx.services.llm.id})`;
-      ctx.emit(`synthesize-research: synthesized via ${ctx.services.llm.id} (${out.trim().length} chars)\n`);
+      ctx.emit(`synthesize-research: synthesized via ${ctx.services.llm.id} (${body.length} chars, ${tags.length} tags)\n`);
     } else {
       ctx.emit(`synthesize-research: LLM (${ctx.services.llm.id}) returned empty; continuing without synthesis\n`);
     }
@@ -247,7 +266,10 @@ const compileResearch: NativeHandler = async (ctx) => {
     status: items.length > 0 ? "complete" : "partial",
     confidence: items.length >= 5 && sourcesUsed.length > 1 ? "high" : items.length >= 3 ? "medium" : "low",
     staleAfterMinutes: 1440,
-    tags: [`topic/${topic.toLowerCase().replace(/\s+/g, "-")}`],
+    tags: [
+      `topic/${topic.toLowerCase().replace(/\s+/g, "-")}`,
+      ...((ctx.context.synthTags as string[] | undefined) ?? []).map((t) => `topic/${t}`),
+    ],
     inputs: { topic },
     // Provenance: which model synthesised the analysis (if any).
     model: typeof ctx.context.synthModel === "string" ? ctx.context.synthModel : undefined,
@@ -348,6 +370,7 @@ const aiWire: NativeHandler = async (ctx) => {
   // Synthesize concise wire headlines (grounded in the items) when an LLM is up.
   let wire = "";
   let model: string | undefined;
+  let aiTags: string[] = [];
   if (ctx.services.llm && ranked.length > 0) {
     const corpus = ranked
       .map((it, i) => `[${i + 1}] (${it.source}, score ${it.score}) ${it.title} — ${it.url}`)
@@ -360,13 +383,16 @@ const aiWire: NativeHandler = async (ctx) => {
       corpus,
       ``,
       `Write 5–8 markdown bullets ("- "), most important first. Each must trace to an item; cite none inline. Skip off-theme items. No headings, no intro.`,
+      `On the very last line, output "TAGS:" then 3–6 short kebab-case topic tags (comma-separated, no # prefix) for the themes covered.`,
     ].join("\n");
     try {
       const out = await ctx.services.llm.complete(prompt, { system, maxTokens: 700 });
       if (out && out.trim()) {
-        wire = out.trim();
+        const split = splitTags(out.trim());
+        wire = split.body;
+        aiTags = split.tags;
         model = `${ctx.services.llm.model} (${ctx.services.llm.id})`;
-        ctx.emit(`ai-wire: synthesized ${wire.split("\n").filter((l) => l.trim().startsWith("-")).length} bullets via ${ctx.services.llm.id}\n`);
+        ctx.emit(`ai-wire: synthesized ${wire.split("\n").filter((l) => l.trim().startsWith("-")).length} bullets, ${aiTags.length} tags via ${ctx.services.llm.id}\n`);
       }
     } catch (err) {
       ctx.emit(`ai-wire: synthesis failed (${(err as Error).message}); falling back to top headlines\n`);
@@ -401,7 +427,7 @@ const aiWire: NativeHandler = async (ctx) => {
     status: ranked.length > 0 ? "complete" : "partial",
     confidence: ranked.length >= 8 ? "high" : ranked.length >= 3 ? "medium" : "low",
     staleAfterMinutes: 180,
-    tags: ["intel", "ai-wire"],
+    tags: ["ai-wire", ...aiTags.map((t) => `topic/${t}`)],
     inputs: { topic },
     model,
     links: [dateKey],
