@@ -1,0 +1,27 @@
+{
+  "id": "ai-wire",
+  "name": "AI Wire",
+  "description": "A terse AI-industry intel brief — gathers recent high-signal activity (Hacker News + Reddit) on AI/Anthropic/OpenAI/models/agents and synthesizes headline bullets into an intel record.",
+  "triggers": ["ai-wire"],
+  "surfaces": ["deck", "nl"],
+  "presentation": {
+    "label": "AI Wire",
+    "icon": "radio",
+    "group": "Knowledge",
+    "inputs": [
+      { "name": "topic", "type": "string", "label": "Theme", "description": "Override the default AI-industry theme" },
+      { "name": "force", "type": "boolean", "label": "Force refresh", "default": false }
+    ]
+  },
+  "modelPolicy": {
+    "execTier": "heavy",
+    "privacy": "cloud-ok"
+  },
+  "execution": {
+    "kind": "native",
+    "handler": "aiWire"
+  },
+  "vaultOutput": "05-intel/{{date}}.md",
+  "staleAfterMinutes": 180,
+  "produces": { "type": "intel", "keyDate": true }
+}

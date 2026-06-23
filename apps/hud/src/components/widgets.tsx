@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { SkillCard } from "@aos/shared";
 import type { HudState, OperationView } from "../useGateway.js";
 import type { WidgetId } from "../layout.js";
+import type { WidgetOptions } from "../widget-options.js";
 
 function timeOf(iso: string): string {
   return (iso.split("T")[1] ?? "").slice(0, 8);
@@ -223,7 +224,78 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <div className="empty">{children}</div>;
 }
 
-export function renderWidget(id: WidgetId, hud: HudState) {
+/** Pull the bullets out of an intel record's "## Wire" section, markdown stripped. */
+function wireBullets(body: string): string[] {
+  const lines = body.split("\n");
+  const start = lines.findIndex((l) => /^##\s+Wire\b/i.test(l));
+  if (start === -1) return [];
+  const out: string[] = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i] ?? "")) break;
+    const m = (lines[i] ?? "").match(/^\s*[-*]\s+(.*)$/);
+    if (m) {
+      out.push(
+        m[1]!
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links -> label
+          .replace(/[*_`]/g, "")
+          .trim(),
+      );
+    }
+  }
+  return out;
+}
+
+/** AI Wire — a terse AI-industry intel brief from the newest `intel` record. */
+function AiWire({ hud, options }: { hud: HudState; options?: WidgetOptions }) {
+  const max = Number(options?.max ?? 8);
+  const topic = String(options?.topic ?? "").trim();
+  const rec = hud.records.find((r) => r.type === "intel");
+  const path = rec?.path;
+  const fetchDoc = hud.fetchDoc;
+  const [bullets, setBullets] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!path) {
+      setBullets([]);
+      return;
+    }
+    let alive = true;
+    fetchDoc(path)
+      .then((d) => alive && d && setBullets(wireBullets(d.body)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [path, fetchDoc]);
+
+  const run = () => hud.send({ type: "invoke", skillId: "ai-wire", params: topic ? { topic } : {} });
+
+  if (!rec) {
+    return (
+      <div className="wire">
+        <Empty>No wire yet — pull the latest AI-industry signal.</Empty>
+        <button className="wire__run" onClick={run}>Run AI Wire</button>
+      </div>
+    );
+  }
+  return (
+    <div className="wire">
+      <button className="wire__head" onClick={() => hud.openDoc(rec.path)} title="Open the full intel record">
+        <span className="wire__sub">{rec.title}</span>
+        <span className="wire__open">open ↗</span>
+      </button>
+      <ul className="wire__list">
+        {bullets.slice(0, max).map((b, i) => (
+          <li key={i}>{b}</li>
+        ))}
+        {bullets.length === 0 ? <li className="wire__muted">(no bullets parsed)</li> : null}
+      </ul>
+      <button className="wire__run" onClick={run} title="Refresh the wire">⟳ refresh</button>
+    </div>
+  );
+}
+
+export function renderWidget(id: WidgetId, hud: HudState, options?: WidgetOptions) {
   switch (id) {
     case "vitals":
       return <VitalMetrics hud={hud} />;
@@ -237,5 +309,7 @@ export function renderWidget(id: WidgetId, hud: HudState) {
       return <Schedule />;
     case "audio":
       return <AudioIO hud={hud} />;
+    case "ai-wire":
+      return <AiWire hud={hud} options={options} />;
   }
 }

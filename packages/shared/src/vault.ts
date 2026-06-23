@@ -15,7 +15,7 @@
 import { z } from "zod";
 
 /** The kinds of records the vault holds. */
-export const DOCUMENT_TYPES = ["research", "knowledge", "ticket", "telemetry", "daily", "inbox"] as const;
+export const DOCUMENT_TYPES = ["research", "knowledge", "ticket", "telemetry", "daily", "inbox", "intel"] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 /** Did the producing task finish cleanly? */
@@ -78,6 +78,7 @@ export const DOCUMENT_CONTRACTS: Record<DocumentType, DocumentContract> = {
   telemetry: { folder: "40-telemetry", requireTldr: false, requiredSections: ["Metrics"] },
   daily: { folder: "01-daily", requireTldr: false, requiredSections: ["Operations"] },
   inbox: { folder: "02-inbox", requireTldr: true, requiredSections: ["Action items"] },
+  intel: { folder: "05-intel", requireTldr: true, requiredSections: ["Wire"] },
 };
 
 /** Markers delimiting OS-authored content. Everything outside is the human's. */

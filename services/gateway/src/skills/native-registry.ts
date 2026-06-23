@@ -326,10 +326,98 @@ const inboxTriage: NativeHandler = async (ctx) => {
   return 0;
 };
 
+// --- AI Wire (themed intel brief: fetch -> synthesize bullets -> intel record) --
+
+// Kept concise: the fetchers do full-text AND search, so a long phrase matches
+// nothing. "AI" over the 30-day window returns plenty; synthesis curates it.
+const AI_WIRE_TOPIC = "AI";
+
+const aiWire: NativeHandler = async (ctx) => {
+  const topic = String(ctx.params.topic ?? "").trim() || AI_WIRE_TOPIC;
+  ctx.params.topic = topic; // the fetch handlers read params.topic
+
+  // Reuse the keyless fetchers to populate ctx.context.researchItems.
+  await fetchHackerNews(ctx);
+  await fetchReddit(ctx);
+
+  const items = (ctx.context.researchItems as ResearchItem[] | undefined) ?? [];
+  const byUrl = new Map<string, ResearchItem>();
+  for (const it of items) if (!byUrl.has(it.url) || byUrl.get(it.url)!.score < it.score) byUrl.set(it.url, it);
+  const ranked = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 25);
+
+  // Synthesize concise wire headlines (grounded in the items) when an LLM is up.
+  let wire = "";
+  let model: string | undefined;
+  if (ctx.services.llm && ranked.length > 0) {
+    const corpus = ranked
+      .map((it, i) => `[${i + 1}] (${it.source}, score ${it.score}) ${it.title} — ${it.url}`)
+      .join("\n");
+    const system =
+      "You write a terse AI-industry intel wire. Use ONLY the provided items. Each line is one tight headline-style bullet (max ~22 words) on a distinct, important development. No preamble, no markdown headings.";
+    const prompt = [
+      `Theme: ${topic}`,
+      `Items:`,
+      corpus,
+      ``,
+      `Write 5–8 markdown bullets ("- "), most important first. Each must trace to an item; cite none inline. Skip off-theme items. No headings, no intro.`,
+    ].join("\n");
+    try {
+      const out = await ctx.services.llm.complete(prompt, { system, maxTokens: 700 });
+      if (out && out.trim()) {
+        wire = out.trim();
+        model = `${ctx.services.llm.model} (${ctx.services.llm.id})`;
+        ctx.emit(`ai-wire: synthesized ${wire.split("\n").filter((l) => l.trim().startsWith("-")).length} bullets via ${ctx.services.llm.id}\n`);
+      }
+    } catch (err) {
+      ctx.emit(`ai-wire: synthesis failed (${(err as Error).message}); falling back to top headlines\n`);
+    }
+  }
+
+  // Fallback: raw top headlines as the wire.
+  if (!wire) {
+    wire =
+      ranked.length > 0
+        ? ranked.slice(0, 8).map((i) => `- [${i.title}](${i.url}) — ${i.score} · ${i.source}`).join("\n")
+        : `- No fresh AI-industry signal in the last 30 days.`;
+  }
+
+  const now = ctx.services.nowIso();
+  const dateKey = (now.split("T")[0] ?? now).slice(0, 10);
+  const top = ranked[0];
+  const tldr = top
+    ? `${ranked.length} AI-industry signals; lead: ${top.title}.`
+    : `No fresh AI-industry signal today.`;
+  const sources: SourceRef[] = ranked.slice(0, 12).map((i) => ({ label: `${i.title} (${i.source})`, url: i.url }));
+
+  const title = `AI Wire — ${dateKey}`;
+  const built = buildResultDocument({
+    type: "intel",
+    key: dateKey,
+    title,
+    source: "ai-wire",
+    tldr,
+    sections: { Wire: wire },
+    sources,
+    status: ranked.length > 0 ? "complete" : "partial",
+    confidence: ranked.length >= 8 ? "high" : ranked.length >= 3 ? "medium" : "low",
+    staleAfterMinutes: 180,
+    tags: ["intel", "ai-wire"],
+    inputs: { topic },
+    model,
+    links: [dateKey],
+    now,
+  });
+  const path = ctx.services.vault.writeGenerated(built.frontmatter, built.generated);
+  ctx.context.result = { path: ctx.services.vault.toRelative(path), title, type: "intel" };
+  ctx.emit(`ai-wire: ${ranked.length} items -> ${path}\n`);
+  return 0;
+};
+
 export const NATIVE_HANDLERS: Record<string, NativeHandler> = {
   fetchHackerNews,
   fetchReddit,
   synthesizeResearch,
   compileResearch,
   inboxTriage,
+  aiWire,
 };
