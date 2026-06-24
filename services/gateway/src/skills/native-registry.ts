@@ -25,14 +25,27 @@ function sourceDisabled(id: string): boolean {
   return config.research.disabled.includes(id);
 }
 
-/** Spawn a binary and capture stdout (for yt-dlp). Rejects on error/timeout/non-zero. */
+/**
+ * Spawn a binary and capture stdout (for yt-dlp). Rejects on error/timeout/non-zero.
+ *
+ * We drive the platform shell explicitly (cmd /c on Windows) with our OWN arg
+ * quoting rather than Node's flaky shell:true quoting — this resolves PATH
+ * entries incl. pyenv-style shims AND keeps multi-word args (e.g. an ytsearch
+ * query) intact. IMPORTANT: callers must keep `%` out of args — cmd.exe mangles
+ * yt-dlp's `%(...)s` templates — so we use --dump-json + a literal -o base.
+ */
 function runCapture(bin: string, args: string[], timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     let out = "";
     let err = "";
     let settled = false;
-    // shell:true so Windows resolves a `.cmd` shim (e.g. yt-dlp.cmd).
-    const child = spawn(bin, args, { shell: true });
+    // Windows: run via cmd /c with the command + args as SEPARATE argv elements,
+    // so Node does its (correct) per-arg quoting and cmd resolves PATH shims
+    // (pyenv). POSIX: spawn the binary directly. Either way args pass intact.
+    const child =
+      process.platform === "win32"
+        ? spawn("cmd", ["/d", "/s", "/c", bin, ...args], { shell: false })
+        : spawn(bin, args, { shell: false });
     const timer = setTimeout(() => {
       settled = true;
       child.kill("SIGKILL");
@@ -298,45 +311,57 @@ const fetchYouTube: NativeHandler = async (ctx) => {
   if (!topic) return 0;
   const humanUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(topic)}`;
   try {
+    // --dump-json (not --print "%(...)") so no `%` reaches cmd.exe under shell:true.
     const out = await runCapture(
       "yt-dlp",
-      [`ytsearch8:${topic}`, "--flat-playlist", "--skip-download", "--no-warnings", "--print", "%(title)s\t%(id)s\t%(view_count)s"],
-      20000,
+      [`ytsearch8:${topic}`, "--flat-playlist", "--dump-json", "--skip-download", "--no-warnings"],
+      25000,
     );
     const items: ResearchItem[] = out
       .split("\n")
-      .map((l) => l.split("\t"))
-      .filter((p) => p.length >= 2 && p[0]?.trim() && p[1]?.trim())
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => {
+        try {
+          return JSON.parse(l) as { id?: string; title?: string; view_count?: number };
+        } catch {
+          return null;
+        }
+      })
+      .filter((r): r is { id?: string; title?: string; view_count?: number } => Boolean(r?.id))
       .slice(0, 10)
-      .map((p) => ({
-        title: p[0]!.trim(),
-        url: `https://www.youtube.com/watch?v=${p[1]!.trim()}`,
-        score: Math.round(Number(p[2] ?? 0)) || 1,
+      .map((r) => ({
+        title: String(r.title ?? "(untitled)"),
+        url: `https://www.youtube.com/watch?v=${r.id}`,
+        score: Math.round(Number(r.view_count ?? 0)) || 1,
         author: "YouTube",
         source: "YouTube",
       }));
 
     // Transcript extraction: pull EN captions for the top few by views, strip to
-    // text, and attach as excerpts (folded into synthesis). Absent captions / no
-    // yt-dlp degrade gracefully — items still carry titles/links.
-    const topIds = items
-      .slice()
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 4)
-      .map((it) => it.url.split("v=")[1])
-      .filter((id): id is string => Boolean(id));
-    if (topIds.length > 0) {
+    // text, attach as excerpts (folded into synthesis). One call per video with a
+    // LITERAL -o base (no `%(...)s` template, which cmd.exe would mangle).
+    const top = items.slice().sort((a, b) => b.score - a.score).slice(0, 4);
+    if (top.length > 0) {
       const dir = mkdtempSync(join(tmpdir(), "aos-yt-"));
       try {
-        await runCapture(
-          "yt-dlp",
-          [
-            "--skip-download", "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,en",
-            "--sub-format", "vtt", "--no-warnings", "-o", join(dir, "%(id)s.%(ext)s"),
-            ...topIds.map((id) => `https://www.youtube.com/watch?v=${id}`),
-          ],
-          45000,
-        );
+        for (const it of top) {
+          const id = it.url.split("v=")[1];
+          if (!id) continue;
+          try {
+            await runCapture(
+              "yt-dlp",
+              [
+                "--skip-download", "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,en",
+                "--sub-format", "vtt", "--no-warnings", "-o", join(dir, id),
+                `https://www.youtube.com/watch?v=${id}`,
+              ],
+              30000,
+            );
+          } catch {
+            /* this video's captions unavailable — skip it */
+          }
+        }
         let got = 0;
         for (const f of readdirSync(dir)) {
           if (!f.endsWith(".vtt")) continue;
