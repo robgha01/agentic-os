@@ -69,6 +69,12 @@ export interface AgenticOsConfig {
   budgets: { defaultMaxLatencyMs: number; defaultMaxCostUsd: number };
   /** Task scheduler: how many operations may run at once; the rest queue (FIFO). */
   tasks: { maxConcurrent: number };
+  /**
+   * How the packaged app opens its window. `launch`: app = a chromeless Chromium
+   * (--app) window · browser = your default browser tab · none = don't open.
+   * `browser`: auto | chrome | edge | brave | chromium | firefox | an absolute path.
+   */
+  ui: { launch: "app" | "browser" | "none"; browser: string };
   voice: {
     mode: "text" | "voice";
     /** Auto-announce finished tasks aloud (voice mode only). */
@@ -91,6 +97,11 @@ export interface AgenticOsConfig {
     tokenStorePath: string;
     graphBaseUrl: string;
   };
+}
+
+/** Are we running as the compiled single-file binary (not node/bun/tsx in dev)? */
+function isPackaged(): boolean {
+  return !/(^|[\\/])(bun|node)(\.exe)?$/i.test(process.execPath);
 }
 
 function build(): AgenticOsConfig {
@@ -159,6 +170,15 @@ function build(): AgenticOsConfig {
   },
   tasks: {
     maxConcurrent: Math.max(1, cfgNum("tasks.maxConcurrent", "AGENTIC_OS_MAX_CONCURRENT", 2)),
+  },
+  ui: {
+    // Auto-open only when running as the packaged binary; quiet in dev.
+    launch: oneOf(
+      cfg("ui.launch", "AGENTIC_OS_UI_LAUNCH", isPackaged() ? "app" : "none"),
+      ["app", "browser", "none"],
+      "none",
+    ),
+    browser: cfg("ui.browser", "AGENTIC_OS_UI_BROWSER", "auto"),
   },
   voice: {
     mode: oneOf(cfg("voice.mode", "AGENTIC_OS_VOICE_MODE", "text"), ["text", "voice"], "text"),

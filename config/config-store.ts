@@ -47,6 +47,8 @@ export const EDITABLE_KEYS = [
   "models.disabled",
   "tasks.maxConcurrent",
   "research.disabled",
+  "ui.launch",
+  "ui.browser",
 ] as const;
 export type EditableKey = (typeof EDITABLE_KEYS)[number];
 

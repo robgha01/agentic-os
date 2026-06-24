@@ -166,6 +166,17 @@ export function Options({ hud }: { hud: HudState }) {
       </section>
 
       <section className="opt">
+        <h2 className="opt__h">Application window</h2>
+        <Select label="Open on launch" k="ui.launch" running={cfg.ui.launch} options={["app", "browser", "none"]} />
+        <Text label="Browser" k="ui.browser" running={cfg.ui.browser} placeholder="auto | chrome | edge | brave | firefox | path" />
+        <p className="opt__hint">
+          <code>app</code> opens a chromeless Chromium window (Chrome/Edge/Brave); <code>browser</code> opens your
+          default browser (any engine); <code>none</code> just serves the HUD at the local URL. Applies to the
+          packaged app on next launch.
+        </p>
+      </section>
+
+      <section className="opt">
         <h2 className="opt__h">Voice</h2>
         <Select label="Mode" k="voice.mode" running={cfg.voice.mode} options={["text", "voice"]} />
         <Select label="TTS engine" k="voice.tts.provider" running={cfg.voice.tts} options={["kokoro", "openai", "elevenlabs"]} />

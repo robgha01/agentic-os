@@ -17,6 +17,7 @@ import { Dispatcher } from "./dispatch/dispatcher.js";
 import { Scheduler } from "./dispatch/scheduler.js";
 import { Router } from "./routing/router.js";
 import { detectRuntime, providerReadiness } from "./runtime.js";
+import { openUi } from "./launcher.js";
 import { SkillLoader } from "./skills/skill-loader.js";
 import { SkillRuntime } from "./skills/skill-runtime.js";
 import type { SkillServices } from "./skills/native-registry.js";
@@ -118,6 +119,11 @@ async function main(): Promise<void> {
   console.log(`[gateway] voice: mode=${config.voice.mode}`);
   console.log(`[gateway] mail: ${config.mail.provider === "none" ? "disabled" : config.mail.provider}`);
   console.log(`[gateway] transport: ${config.router.transport}`);
+
+  // Open the HUD window per config.ui (chromeless Chromium app / default browser / none).
+  const url = `http://localhost:${server.port}`;
+  const launchMsg = openUi(url, { launch: config.ui.launch, browser: config.ui.browser });
+  console.log(`[gateway] ui: ${launchMsg}`);
 
   const shutdown = async (): Promise<void> => {
     console.log("\n[gateway] shutting down…");

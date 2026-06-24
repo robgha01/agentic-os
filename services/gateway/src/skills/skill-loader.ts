@@ -7,6 +7,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSkillManifest, type SkillCard, type SkillManifest } from "@aos/shared";
+import { SKILL_MANIFESTS } from "../generated/embedded.js";
 
 /** Default skills dir: <repo-root>/skills, resolved relative to this module. */
 function defaultSkillsDir(): string {
@@ -24,6 +25,18 @@ export class SkillLoader {
   load(): number {
     this.byTrigger.clear();
     this.byId.clear();
+
+    // Packaged binary: manifests are baked in. Dev: scan the skills/ tree.
+    if (SKILL_MANIFESTS.length > 0) {
+      for (const raw of SKILL_MANIFESTS) {
+        try {
+          this.register(parseSkillManifest(raw));
+        } catch (err) {
+          console.error(`[skill-loader] skipping embedded manifest: ${(err as Error).message}`);
+        }
+      }
+      return this.byId.size;
+    }
 
     if (!existsSync(this.skillsDir)) return 0;
 

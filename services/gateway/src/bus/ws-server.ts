@@ -22,6 +22,7 @@ import type { Dispatcher } from "../dispatch/dispatcher.js";
 import type { SkillLoader } from "../skills/skill-loader.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
 import { extractSpokenCore } from "../memory/document-builder.js";
+import { serveHud } from "./static-hud.js";
 import type { EventBus } from "./event-bus.js";
 
 export class GatewayServer {
@@ -123,6 +124,7 @@ export class GatewayServer {
             providers: this.providers?.() ?? [],
             models: { fallbackOrder: config.models.fallbackOrder, disabled: config.models.disabled },
             tasks: { maxConcurrent: config.tasks.maxConcurrent },
+            ui: { launch: config.ui.launch, browser: config.ui.browser },
             openai: { baseUrl: config.openai.baseUrl, model: config.openai.model },
             ollama: { baseUrl: config.ollama.baseUrl, model: config.ollama.model },
             vault: { path: config.vault.path },
@@ -148,8 +150,8 @@ export class GatewayServer {
           return json(res, { ...doc, path, obsidianUri });
         }
         default:
-          res.writeHead(404, cors);
-          res.end();
+          // Everything else is the HUD (static assets / SPA routes).
+          return void serveHud(url.pathname, res, cors);
       }
     });
     this.wss = new WebSocketServer({ server: this.http });
