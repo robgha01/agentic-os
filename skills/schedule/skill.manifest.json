@@ -1,0 +1,26 @@
+{
+  "id": "schedule",
+  "name": "Today's Schedule",
+  "description": "Reads today's calendar from the mail provider (Outlook / Microsoft 365 via Graph) and briefs the user on their meetings and agenda.",
+  "triggers": ["schedule"],
+  "surfaces": ["deck", "nl"],
+  "presentation": {
+    "label": "Today's Schedule",
+    "icon": "calendar",
+    "group": "Workflows",
+    "inputs": [
+      { "name": "force", "type": "boolean", "label": "Force refresh", "default": false }
+    ]
+  },
+  "modelPolicy": {
+    "execTier": "light",
+    "privacy": "cloud-ok"
+  },
+  "execution": {
+    "kind": "native",
+    "handler": "scheduleBrief"
+  },
+  "vaultOutput": "04-schedule/{{date}}.md",
+  "staleAfterMinutes": 120,
+  "produces": { "type": "schedule", "keyDate": true }
+}

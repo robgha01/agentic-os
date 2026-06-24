@@ -30,6 +30,15 @@ export const ROUTES: readonly RouteRule[] = [
     examples: ["give me the rundown", "rundown", "brief me", "morning report", "daily update", "morning brief"],
   },
   {
+    id: "schedule",
+    // Plain schedule asks. "rundown of today's schedule" still hits rundown
+    // (priority 100) — and the morning report folds the schedule in anyway.
+    pattern: /\b(my (?:schedule|calendar|agenda)|today'?s (?:schedule|agenda|meetings)|what'?s on (?:today|my calendar))\b/i,
+    action: "schedule",
+    priority: 95,
+    examples: ["my schedule", "today's schedule", "what's on today", "my calendar"],
+  },
+  {
     id: "sync",
     pattern: /\b(sync|synchron[is]z?e|refresh everything)\b/i,
     action: "sync",

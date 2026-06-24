@@ -29,9 +29,21 @@ export interface MailMessage {
   webLink?: string;
 }
 
+export interface CalendarEvent {
+  subject: string;
+  start: string; // ISO
+  end: string; // ISO
+  allDay: boolean;
+  location?: string;
+  organizer?: string;
+  webLink?: string;
+}
+
 export interface MailProvider {
   readonly id: string;
   listUnread(limit: number): Promise<MailMessage[]>;
+  /** Calendar events in [fromIso, toIso); optional — only providers with calendar support it. */
+  listEvents?(fromIso: string, toIso: string, limit?: number): Promise<CalendarEvent[]>;
 }
 
 interface GraphMessage {
@@ -81,6 +93,45 @@ export class OutlookGraphProvider implements MailProvider {
       webLink: m.webLink,
     }));
   }
+
+  /** Calendar events in a window (needs the Calendars.Read scope). */
+  async listEvents(fromIso: string, toIso: string, limit = 25): Promise<CalendarEvent[]> {
+    const token = await this.tokens.getToken();
+    const url =
+      `${this.baseUrl}/me/calendarView` +
+      `?startDateTime=${encodeURIComponent(fromIso)}&endDateTime=${encodeURIComponent(toIso)}` +
+      `&$select=subject,start,end,location,organizer,isAllDay,webLink` +
+      `&$orderby=start/dateTime&$top=${Math.max(1, Math.min(limit, 50))}`;
+
+    const res = await fetch(url, {
+      headers: { authorization: `Bearer ${token}`, prefer: 'outlook.timezone="UTC"' },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Microsoft Graph ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as { value?: GraphEvent[] };
+    return (data.value ?? []).map((e) => ({
+      subject: e.subject ?? "(no subject)",
+      start: e.start?.dateTime ?? "",
+      end: e.end?.dateTime ?? "",
+      allDay: Boolean(e.isAllDay),
+      location: e.location?.displayName || undefined,
+      organizer: e.organizer?.emailAddress?.name ?? e.organizer?.emailAddress?.address,
+      webLink: e.webLink,
+    }));
+  }
+}
+
+interface GraphEvent {
+  subject: string | null;
+  isAllDay?: boolean;
+  start?: { dateTime?: string };
+  end?: { dateTime?: string };
+  location?: { displayName?: string };
+  organizer?: { emailAddress?: { name?: string; address?: string } };
+  webLink?: string;
 }
 
 export interface MailHooks {

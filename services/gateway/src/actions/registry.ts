@@ -31,6 +31,12 @@ export const ACTION_REGISTRY: readonly Action[] = [
     ],
   },
   {
+    id: "schedule",
+    description:
+      "Read today's calendar/schedule from the mail provider (Outlook/Microsoft 365) and brief the user on their meetings and agenda for the day.",
+    keywords: ["schedule", "calendar", "agenda", "meetings", "today's schedule"],
+  },
+  {
     id: "inbox-triage",
     description:
       "Triage the email inbox: classify, summarize, and surface action items from unread mail.",

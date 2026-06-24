@@ -183,7 +183,11 @@ function build(): AgenticOsConfig {
     ),
     clientId: cfg("mail.clientId", "AGENTIC_OS_MAIL_CLIENT_ID", "14d82eec-204b-4c2f-b7e8-296a70dab67e"),
     tenant: cfg("mail.tenant", "AGENTIC_OS_MAIL_TENANT", "common"),
-    scopes: cfg("mail.scopes", "AGENTIC_OS_MAIL_SCOPES", "https://graph.microsoft.com/Mail.Read offline_access"),
+    scopes: cfg(
+      "mail.scopes",
+      "AGENTIC_OS_MAIL_SCOPES",
+      "https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Calendars.Read offline_access",
+    ),
     tokenStorePath: cfg("mail.tokenStorePath", "AGENTIC_OS_MAIL_TOKEN_STORE", join(homedir(), ".agentic-os", "mail-token.json")),
     graphBaseUrl: cfg("mail.graphBaseUrl", "AGENTIC_OS_GRAPH_BASE_URL", "https://graph.microsoft.com/v1.0"),
     },

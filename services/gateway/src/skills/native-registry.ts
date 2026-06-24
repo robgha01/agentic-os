@@ -439,6 +439,84 @@ const aiWire: NativeHandler = async (ctx) => {
   return 0;
 };
 
+// --- Calendar / schedule (Outlook via the mail provider) --------------------
+
+/** Today's agenda from the mail provider's calendar, or null if unavailable. */
+async function fetchTodayAgenda(ctx: NativeHandlerContext): Promise<{ count: number; agenda: string } | null> {
+  const mail = ctx.services.mail;
+  if (!mail?.listEvents) return null;
+  const now = ctx.services.nowIso();
+  const day = (now.split("T")[0] ?? now).slice(0, 10);
+  try {
+    const events = await mail.listEvents(`${day}T00:00:00Z`, `${day}T23:59:59Z`, 25);
+    if (events.length === 0) return { count: 0, agenda: "- No meetings today." };
+    const agenda = events
+      .map((e) => {
+        const t = e.allDay ? "all day" : (e.start.split("T")[1] ?? "").slice(0, 5);
+        const loc = e.location ? ` @ ${e.location}` : "";
+        return `- ${t} — ${e.subject}${loc}`;
+      })
+      .join("\n");
+    return { count: events.length, agenda };
+  } catch (err) {
+    ctx.emit(`schedule: calendar fetch failed (${(err as Error).message})\n`);
+    return null;
+  }
+}
+
+const scheduleBrief: NativeHandler = async (ctx) => {
+  const mail = ctx.services.mail;
+  if (!mail?.listEvents) {
+    ctx.emit("schedule: no calendar provider (set mail.provider=outlook and sign in with Calendars.Read)\n");
+    return 1;
+  }
+  const agenda = await fetchTodayAgenda(ctx);
+  if (!agenda) return 1;
+
+  const now = ctx.services.nowIso();
+  const dateKey = (now.split("T")[0] ?? now).slice(0, 10);
+  let tldr = agenda.count > 0 ? `${agenda.count} meeting(s) on today's calendar.` : "No meetings today.";
+  let model: string | undefined;
+  if (ctx.services.llm && agenda.count > 0) {
+    try {
+      const out = (
+        await ctx.services.llm.complete(
+          `Today's agenda:\n${agenda.agenda}\n\nIn ONE spoken sentence, summarize the day's schedule (load, busiest stretch, key meetings).`,
+          { system: "You are a concise, spoken-friendly scheduler. One sentence, no markdown.", maxTokens: 200 },
+        )
+      ).trim();
+      if (out) {
+        tldr = out.split("\n")[0]!.replace(/^[-*#>\s]+/, "").trim();
+        model = `${ctx.services.llm.model} (${ctx.services.llm.id})`;
+      }
+    } catch {
+      /* keep the templated tldr */
+    }
+  }
+
+  const title = `Schedule — ${dateKey}`;
+  const built = buildResultDocument({
+    type: "schedule",
+    key: dateKey,
+    title,
+    source: "schedule",
+    tldr,
+    sections: { Agenda: agenda.agenda },
+    status: "complete",
+    confidence: agenda.count > 0 ? "high" : "low",
+    staleAfterMinutes: 120,
+    tags: ["schedule"],
+    inputs: {},
+    model,
+    links: [dateKey],
+    now,
+  });
+  const path = ctx.services.vault.writeGenerated(built.frontmatter, built.generated);
+  ctx.context.result = { path: ctx.services.vault.toRelative(path), title, type: "schedule" };
+  ctx.emit(`schedule: ${agenda.count} events -> ${path}\n`);
+  return 0;
+};
+
 // --- Morning report (daily brief synthesized from the vault) ----------------
 
 const morningReport: NativeHandler = async (ctx) => {
@@ -454,6 +532,9 @@ const morningReport: NativeHandler = async (ctx) => {
     ? recent.map((r) => `- **${r.type}** — ${r.title}`).join("\n")
     : "- No records yet.";
 
+  // Today's calendar (folded in when the mail provider has it).
+  const agenda = await fetchTodayAgenda(ctx);
+
   let tldr = "";
   let brief = "";
   let model: string | undefined;
@@ -461,6 +542,7 @@ const morningReport: NativeHandler = async (ctx) => {
     const system = "You are the user's concise, spoken-friendly morning briefer. No fluff, no headings.";
     const prompt = [
       `Date: ${dateKey}`,
+      ...(agenda ? [`Today's schedule:`, agenda.agenda, ``] : []),
       `Today's operation log:`,
       opsLog || "(nothing logged yet)",
       ``,
@@ -495,7 +577,11 @@ const morningReport: NativeHandler = async (ctx) => {
     title,
     source: "morning-report",
     tldr,
-    sections: { Brief: brief, Recent: recentLines },
+    sections: {
+      Brief: brief,
+      ...(agenda ? { Schedule: agenda.agenda } : {}),
+      Recent: recentLines,
+    },
     status: "complete",
     confidence: recent.length > 0 ? "medium" : "low",
     staleAfterMinutes: 720, // ~half a day: a repeat "rundown" the same morning serves the cached brief
@@ -519,4 +605,5 @@ export const NATIVE_HANDLERS: Record<string, NativeHandler> = {
   inboxTriage,
   aiWire,
   morningReport,
+  scheduleBrief,
 };
