@@ -1,0 +1,9 @@
+{
+  "id": "fetch-x",
+  "name": "Fetch X",
+  "description": "Sub-skill: queries the X/Twitter recent-search API (needs a bearer token) for the topic and adds high-engagement posts onto the shared composite context. Skips gracefully when no token is configured.",
+  "triggers": ["fetch-x"],
+  "surfaces": [],
+  "modelPolicy": { "execTier": "none", "privacy": "cloud-ok" },
+  "execution": { "kind": "native", "handler": "fetchX" }
+}

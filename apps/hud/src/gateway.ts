@@ -45,7 +45,7 @@ export interface ConfigView {
   router: { defaultProvider: string; transport: string };
   voice: { mode: string; announce: boolean; stt: string; tts: string };
   mail: { provider: string; tokenSource: string; signedIn: boolean };
-  research: { sources: { id: string; label: string; auth: string }[] };
+  research: { sources: { id: string; label: string; auth: string; enabled: boolean }[] };
   providers: ProviderStatus[];
   models: { fallbackOrder: string[]; disabled: string[] };
   tasks: { maxConcurrent: number };

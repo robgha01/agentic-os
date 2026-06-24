@@ -9,11 +9,49 @@
  * Research pipeline (keyless): fetchHackerNews + fetchReddit append to a shared
  * item list, then compileResearch writes one cited research record.
  */
+import { spawn } from "node:child_process";
 import type { RoutedIntent } from "@aos/shared";
+import { config } from "../../../../config/agentic-os.config.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
 import type { MailProvider } from "../mail/mail-provider.js";
 import type { LlmService } from "../llm/llm-service.js";
 import { buildResultDocument, type SourceRef } from "../memory/document-builder.js";
+
+/** A research source the user has switched off (skipped by its fetcher). */
+function sourceDisabled(id: string): boolean {
+  return config.research.disabled.includes(id);
+}
+
+/** Spawn a binary and capture stdout (for yt-dlp). Rejects on error/timeout/non-zero. */
+function runCapture(bin: string, args: string[], timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let out = "";
+    let err = "";
+    let settled = false;
+    // shell:true so Windows resolves a `.cmd` shim (e.g. yt-dlp.cmd).
+    const child = spawn(bin, args, { shell: true });
+    const timer = setTimeout(() => {
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`${bin} timed out`));
+    }, timeoutMs);
+    child.stdout.on("data", (d: Buffer) => (out += d.toString()));
+    child.stderr.on("data", (d: Buffer) => (err += d.toString()));
+    child.on("error", (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`spawn failed: ${e.message}`));
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0) resolve(out.trim());
+      else reject(new Error(err.trim() || `exit ${code}`));
+    });
+  });
+}
 
 /** Services the gateway injects into every native handler. */
 export interface SkillServices {
@@ -153,6 +191,150 @@ const fetchReddit: NativeHandler = async (ctx) => {
   } catch (err) {
     collect(ctx, [], { label: `Reddit search: ${topic}`, url: humanUrl });
     ctx.emit(`fetch-reddit: failed (${(err as Error).message})\n`);
+  }
+  return 0;
+};
+
+// --- Polymarket (keyless gamma API) — prediction-market signal -------------
+
+const fetchPolymarket: NativeHandler = async (ctx) => {
+  if (sourceDisabled("polymarket")) return 0;
+  const topic = String(ctx.params.topic ?? "").trim();
+  if (!topic) return 0;
+  const terms = topic.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+  const humanUrl = `https://polymarket.com/markets?_q=${encodeURIComponent(topic)}`;
+  try {
+    const res = await fetch(
+      "https://gamma-api.polymarket.com/markets?closed=false&active=true&limit=120&order=volume&ascending=false",
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = (await res.json()) as unknown;
+    const markets = (Array.isArray(raw) ? raw : []) as Array<{ question?: string; slug?: string; volume?: number | string }>;
+    const items: ResearchItem[] = markets
+      .filter((m) => m.question && (terms.length === 0 || terms.some((t) => m.question!.toLowerCase().includes(t))))
+      .slice(0, 10)
+      .map((m) => ({
+        title: m.question!,
+        url: m.slug ? `https://polymarket.com/event/${m.slug}` : humanUrl,
+        score: Math.round(Number(m.volume ?? 0)),
+        author: "Polymarket",
+        source: "Polymarket",
+      }));
+    collect(ctx, items, { label: `Polymarket: ${topic}`, url: humanUrl });
+    ctx.emit(`fetch-polymarket: ${items.length} markets\n`);
+  } catch (err) {
+    collect(ctx, [], { label: `Polymarket: ${topic}`, url: humanUrl });
+    ctx.emit(`fetch-polymarket: failed (${(err as Error).message})\n`);
+  }
+  return 0;
+};
+
+// --- Web (keyless DuckDuckGo HTML search; fallback breadth) -----------------
+
+const fetchWeb: NativeHandler = async (ctx) => {
+  if (sourceDisabled("web")) return 0;
+  const topic = String(ctx.params.topic ?? "").trim();
+  if (!topic) return 0;
+  const humanUrl = `https://duckduckgo.com/?q=${encodeURIComponent(topic)}`;
+  try {
+    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(topic)}`, {
+      headers: { "user-agent": "Mozilla/5.0 (agentic-os research)" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const items: ResearchItem[] = [];
+    const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    let m: RegExpExecArray | null;
+    let rank = 0;
+    while ((m = re.exec(html)) && items.length < 10) {
+      rank++;
+      let href = m[1]!;
+      const um = href.match(/[?&]uddg=([^&]+)/);
+      if (um) href = decodeURIComponent(um[1]!);
+      const title = m[2]!.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+      if (title && /^https?:/.test(href)) {
+        items.push({ title, url: href, score: Math.max(1, 11 - rank), author: "Web", source: "Web" });
+      }
+    }
+    collect(ctx, items, { label: `Web search: ${topic}`, url: humanUrl });
+    ctx.emit(`fetch-web: ${items.length} results\n`);
+  } catch (err) {
+    collect(ctx, [], { label: `Web search: ${topic}`, url: humanUrl });
+    ctx.emit(`fetch-web: failed (${(err as Error).message})\n`);
+  }
+  return 0;
+};
+
+// --- YouTube (yt-dlp search; binary dependency, no key) ---------------------
+
+const fetchYouTube: NativeHandler = async (ctx) => {
+  if (sourceDisabled("youtube")) return 0;
+  const topic = String(ctx.params.topic ?? "").trim();
+  if (!topic) return 0;
+  const humanUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(topic)}`;
+  try {
+    const out = await runCapture(
+      "yt-dlp",
+      [`ytsearch8:${topic}`, "--flat-playlist", "--skip-download", "--no-warnings", "--print", "%(title)s\t%(webpage_url)s\t%(view_count)s"],
+      20000,
+    );
+    const items: ResearchItem[] = out
+      .split("\n")
+      .map((l) => l.split("\t"))
+      .filter((p) => p.length >= 2 && p[0]?.trim())
+      .slice(0, 10)
+      .map((p) => ({
+        title: p[0]!.trim(),
+        url: (p[1] ?? humanUrl).trim(),
+        score: Math.round(Number(p[2] ?? 0)) || 1,
+        author: "YouTube",
+        source: "YouTube",
+      }));
+    collect(ctx, items, { label: `YouTube: ${topic}`, url: humanUrl });
+    ctx.emit(`fetch-youtube: ${items.length} videos\n`);
+  } catch (err) {
+    collect(ctx, [], { label: `YouTube: ${topic}`, url: humanUrl });
+    ctx.emit(`fetch-youtube: skipped (${(err as Error).message}); is yt-dlp installed?\n`);
+  }
+  return 0;
+};
+
+// --- X / Twitter (recent search; needs a bearer token) ----------------------
+
+const fetchX: NativeHandler = async (ctx) => {
+  if (sourceDisabled("x")) return 0;
+  const topic = String(ctx.params.topic ?? "").trim();
+  if (!topic) return 0;
+  const token = config.x.bearerToken;
+  if (!token) {
+    ctx.emit("fetch-x: no X bearer token configured (set x.bearerToken); skipping\n");
+    return 0;
+  }
+  const humanUrl = `https://twitter.com/search?q=${encodeURIComponent(topic)}&f=live`;
+  try {
+    const q = encodeURIComponent(`${topic} -is:retweet lang:en`);
+    const res = await fetch(
+      `https://api.twitter.com/2/tweets/search/recent?query=${q}&max_results=20&tweet.fields=public_metrics`,
+      { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as {
+      data?: Array<{ id: string; text: string; public_metrics?: { like_count?: number; retweet_count?: number } }>;
+    };
+    const items: ResearchItem[] = (data.data ?? []).map((t) => ({
+      title: t.text.replace(/\s+/g, " ").slice(0, 140),
+      url: `https://twitter.com/i/web/status/${t.id}`,
+      score: (t.public_metrics?.like_count ?? 0) + (t.public_metrics?.retweet_count ?? 0),
+      author: "X",
+      source: "X",
+    }));
+    collect(ctx, items, { label: `X search: ${topic}`, url: humanUrl });
+    ctx.emit(`fetch-x: ${items.length} posts\n`);
+  } catch (err) {
+    collect(ctx, [], { label: `X search: ${topic}`, url: humanUrl });
+    ctx.emit(`fetch-x: failed (${(err as Error).message})\n`);
   }
   return 0;
 };
@@ -600,6 +782,10 @@ const morningReport: NativeHandler = async (ctx) => {
 export const NATIVE_HANDLERS: Record<string, NativeHandler> = {
   fetchHackerNews,
   fetchReddit,
+  fetchPolymarket,
+  fetchWeb,
+  fetchYouTube,
+  fetchX,
   synthesizeResearch,
   compileResearch,
   inboxTriage,

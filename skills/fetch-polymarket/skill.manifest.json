@@ -1,0 +1,9 @@
+{
+  "id": "fetch-polymarket",
+  "name": "Fetch Polymarket",
+  "description": "Sub-skill: pulls active Polymarket prediction markets matching the topic (keyless gamma API) onto the shared composite context as probability/volume signal.",
+  "triggers": ["fetch-polymarket"],
+  "surfaces": [],
+  "modelPolicy": { "execTier": "none", "privacy": "cloud-ok" },
+  "execution": { "kind": "native", "handler": "fetchPolymarket" }
+}

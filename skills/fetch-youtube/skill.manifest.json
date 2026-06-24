@@ -1,0 +1,9 @@
+{
+  "id": "fetch-youtube",
+  "name": "Fetch YouTube",
+  "description": "Sub-skill: searches YouTube via the yt-dlp binary (no key) for the topic and adds video titles/links/view-counts onto the shared composite context. Skips gracefully if yt-dlp isn't installed.",
+  "triggers": ["fetch-youtube"],
+  "surfaces": [],
+  "modelPolicy": { "execTier": "none", "privacy": "cloud-ok" },
+  "execution": { "kind": "native", "handler": "fetchYouTube" }
+}

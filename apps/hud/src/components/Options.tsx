@@ -87,6 +87,21 @@ export function Options({ hud }: { hud: HudState }) {
     change("models.disabled", [...disabledSet].join(","));
   };
 
+  // Disabled research-source set (same CSV pattern): pending edit > running
+  // (the off sources implied by /config's enabled flags).
+  const researchRunning = cfg.research.sources.filter((s) => !s.enabled).map((s) => s.id).join(",");
+  const researchOff = new Set(
+    valueOf("research.disabled", researchRunning)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  const toggleSource = (id: string) => {
+    if (researchOff.has(id)) researchOff.delete(id);
+    else researchOff.add(id);
+    change("research.disabled", [...researchOff].join(","));
+  };
+
   return (
     <div className="options">
       <h1 className="options__title">Options</h1>
@@ -174,14 +189,29 @@ export function Options({ hud }: { hud: HudState }) {
 
       <section className="opt">
         <h2 className="opt__h">Research sources</h2>
-        {cfg.research.sources.map((s) => (
-          <Row key={s.id} label={s.label} value={s.auth} />
-        ))}
         <p className="opt__hint">
-          Both keyless. Reddit can rate-limit from some networks; an authenticated
-          script-app token is a planned option. Synthesis quality depends on the
-          Claude transport above.
+          Sources feeding the deep-research pipeline. Toggle any off to skip it.
+          YouTube needs the <code>yt-dlp</code> binary; X needs a bearer token (Secrets below).
         </p>
+        {cfg.research.sources.map((s) => {
+          const enabled = !researchOff.has(s.id);
+          return (
+            <div className="opt__row" key={s.id}>
+              <span className="opt__key">
+                {s.label}
+                <span className="opt__sub">{s.auth}</span>
+              </span>
+              <button
+                className={`opt__toggle ${enabled ? "opt__toggle--on" : ""}`}
+                role="switch"
+                aria-checked={enabled}
+                onClick={() => toggleSource(s.id)}
+              >
+                <span className="opt__toggleknob" /> {enabled ? "on" : "off"}
+              </button>
+            </div>
+          );
+        })}
       </section>
 
       <section className="opt">
@@ -192,6 +222,7 @@ export function Options({ hud }: { hud: HudState }) {
         </p>
         <SecretField label="Anthropic API key" k="anthropic.apiKey" present={!!cfg.secrets["anthropic.apiKey"]} hud={hud} onSaved={() => setDirty(true)} />
         <SecretField label="OpenAI API key" k="openai.apiKey" present={!!cfg.secrets["openai.apiKey"]} hud={hud} onSaved={() => setDirty(true)} />
+        <SecretField label="X / Twitter bearer token" k="x.bearerToken" present={!!cfg.secrets["x.bearerToken"]} hud={hud} onSaved={() => setDirty(true)} />
         <SecretField label="Outlook static token" k="mail.token" present={!!cfg.secrets["mail.token"]} hud={hud} onSaved={() => setDirty(true)} />
       </section>
 

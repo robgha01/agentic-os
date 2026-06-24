@@ -1,0 +1,9 @@
+{
+  "id": "fetch-web",
+  "name": "Fetch Web",
+  "description": "Sub-skill: a keyless web-search fallback (DuckDuckGo HTML) that adds broad-spectrum result titles/links for the topic onto the shared composite context.",
+  "triggers": ["fetch-web"],
+  "surfaces": [],
+  "modelPolicy": { "execTier": "none", "privacy": "cloud-ok" },
+  "execution": { "kind": "native", "handler": "fetchWeb" }
+}

@@ -112,8 +112,12 @@ export class GatewayServer {
             research: {
               sources: [
                 { id: "hackernews", label: "Hacker News", auth: "keyless" },
-                { id: "reddit", label: "Reddit", auth: "keyless (may rate-limit from some IPs)" },
-              ],
+                { id: "reddit", label: "Reddit", auth: "keyless (may rate-limit)" },
+                { id: "polymarket", label: "Polymarket", auth: "keyless" },
+                { id: "web", label: "Web search", auth: "keyless (DuckDuckGo)" },
+                { id: "youtube", label: "YouTube", auth: "needs yt-dlp binary" },
+                { id: "x", label: "X / Twitter", auth: config.x.bearerToken ? "token set" : "needs bearer token" },
+              ].map((s) => ({ ...s, enabled: !config.research.disabled.includes(s.id) })),
             },
             // Model providers + their live readiness, and the execution preference.
             providers: this.providers?.() ?? [],

@@ -60,6 +60,10 @@ export interface AgenticOsConfig {
    * the set of providers the user has switched off (`disabled`, never chosen).
    */
   models: { fallbackOrder: string[]; disabled: string[] };
+  /** Research source ids the user has switched off (skipped by their fetcher). */
+  research: { disabled: string[] };
+  /** X/Twitter API (recent search) — needs a bearer token; absent = source skipped. */
+  x: { bearerToken?: string };
   vault: { path: string; managedBlocks: boolean };
   ports: { gateway: number; voice: number };
   budgets: { defaultMaxLatencyMs: number; defaultMaxCostUsd: number };
@@ -131,6 +135,15 @@ function build(): AgenticOsConfig {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+  },
+  research: {
+    disabled: cfg("research.disabled", "AGENTIC_OS_RESEARCH_DISABLED", "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+  x: {
+    bearerToken: cfgOpt("x.bearerToken", "X_BEARER_TOKEN"),
   },
   vault: {
     path: cfg("vault.path", "AGENTIC_OS_VAULT_PATH", join(REPO_ROOT, "vault")),
