@@ -138,6 +138,7 @@ export function Options({ hud }: { hud: HudState }) {
           );
         })}
         <Text label="Fallback order" k="models.fallbackOrder" running={cfg.models.fallbackOrder.join(",")} placeholder="claude-code,openai,ollama,haiku" />
+        <Text label="Max concurrent tasks" k="tasks.maxConcurrent" running={String(cfg.tasks.maxConcurrent)} placeholder="2" />
         <Text label="OpenAI base URL" k="openai.baseUrl" running={cfg.openai.baseUrl} placeholder="https://api.openai.com/v1" />
         <Text label="OpenAI model" k="openai.model" running={cfg.openai.model} placeholder="gpt-4o-mini" />
         <Text label="Ollama base URL" k="ollama.baseUrl" running={cfg.ollama.baseUrl} placeholder="http://localhost:11434" />

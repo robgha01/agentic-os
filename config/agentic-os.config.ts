@@ -63,6 +63,8 @@ export interface AgenticOsConfig {
   vault: { path: string; managedBlocks: boolean };
   ports: { gateway: number; voice: number };
   budgets: { defaultMaxLatencyMs: number; defaultMaxCostUsd: number };
+  /** Task scheduler: how many operations may run at once; the rest queue (FIFO). */
+  tasks: { maxConcurrent: number };
   voice: {
     mode: "text" | "voice";
     /** Auto-announce finished tasks aloud (voice mode only). */
@@ -141,6 +143,9 @@ function build(): AgenticOsConfig {
   budgets: {
     defaultMaxLatencyMs: cfgNum("budgets.maxLatencyMs", "AGENTIC_OS_MAX_LATENCY_MS", 8000),
     defaultMaxCostUsd: cfgNum("budgets.maxCostUsd", "AGENTIC_OS_MAX_COST_USD", 0.05),
+  },
+  tasks: {
+    maxConcurrent: Math.max(1, cfgNum("tasks.maxConcurrent", "AGENTIC_OS_MAX_CONCURRENT", 2)),
   },
   voice: {
     mode: oneOf(cfg("voice.mode", "AGENTIC_OS_VOICE_MODE", "text"), ["text", "voice"], "text"),

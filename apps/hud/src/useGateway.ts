@@ -68,6 +68,8 @@ export interface HudState {
   signals: number;
   signalSeries: number[];
   coreState: CoreState;
+  running: number;
+  queued: number;
   records: VaultSummary[];
   openDocPath: string | null;
   taskCards: TaskCardView[];
@@ -131,6 +133,8 @@ export function useGateway(): HudState {
   const [records, setRecords] = useState<VaultSummary[]>([]);
   const [openDocPath, setOpenDocPath] = useState<string | null>(null);
   const [taskCards, setTaskCards] = useState<TaskCardView[]>(loadCards);
+  const [running, setRunning] = useState(0);
+  const [queued, setQueued] = useState(0);
 
   const noteId = useRef(0);
   // Seed past any persisted ids so new cards never collide with restored ones.
@@ -147,9 +151,14 @@ export function useGateway(): HudState {
     sinceTick.current += 1;
 
     switch (e.type) {
+      case "operation.queued":
+        setQueued((q) => q + 1);
+        break;
       case "operation.started":
         runningCount.current += 1;
         setRunningTick((t) => t + 1);
+        setRunning((r) => r + 1);
+        setQueued((q) => Math.max(0, q - 1));
         opMeta.current.set(e.op.opId, { actionId: e.op.actionId, skillId: e.op.skillId });
         setOperations((ops) =>
           [
@@ -173,6 +182,7 @@ export function useGateway(): HudState {
       case "operation.completed": {
         runningCount.current = Math.max(0, runningCount.current - 1);
         setRunningTick((t) => t + 1);
+        setRunning((r) => Math.max(0, r - 1));
         setSettledCount((c) => c + 1);
         setOperations((ops) =>
           ops.map((o) => (o.opId === e.opId ? { ...o, status: "done", exitCode: e.exitCode } : o)),
@@ -201,6 +211,7 @@ export function useGateway(): HudState {
       case "operation.failed": {
         runningCount.current = Math.max(0, runningCount.current - 1);
         setRunningTick((t) => t + 1);
+        setRunning((r) => Math.max(0, r - 1));
         setSettledCount((c) => c + 1);
         setOperations((ops) =>
           ops.map((o) => (o.opId === e.opId ? { ...o, status: "failed", error: e.error } : o)),
@@ -323,6 +334,8 @@ export function useGateway(): HudState {
     signals,
     signalSeries,
     coreState,
+    running,
+    queued,
     records,
     openDocPath,
     taskCards,

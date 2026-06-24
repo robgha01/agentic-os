@@ -14,6 +14,7 @@ import { AuditLogger } from "./audit/audit-log.js";
 import { EventBus, now } from "./bus/event-bus.js";
 import { GatewayServer } from "./bus/ws-server.js";
 import { Dispatcher } from "./dispatch/dispatcher.js";
+import { Scheduler } from "./dispatch/scheduler.js";
 import { Router } from "./routing/router.js";
 import { detectRuntime, providerReadiness } from "./runtime.js";
 import { SkillLoader } from "./skills/skill-loader.js";
@@ -80,6 +81,10 @@ async function main(): Promise<void> {
   });
   const dispatcher = new Dispatcher(router, loader, bus, runtime, vault, new SkillRuntime(bus, loader, buildServices()));
 
+  // Global concurrency limit + FIFO queue in front of the dispatcher. Reads the
+  // limit live, so changing tasks.maxConcurrent in Options applies immediately.
+  const scheduler = new Scheduler(bus, () => config.tasks.maxConcurrent);
+
   // Live apply: reload config from the store/env and rebuild affected pieces.
   async function applyConfig(): Promise<void> {
     reloadConfig();
@@ -103,6 +108,7 @@ async function main(): Promise<void> {
     applyConfig,
     (text) => void speaker.say(text),
     () => providerReadiness(runtime),
+    scheduler,
   );
   await server.start();
 
