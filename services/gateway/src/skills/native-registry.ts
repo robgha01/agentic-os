@@ -10,6 +10,9 @@
  * item list, then compileResearch writes one cited research record.
  */
 import { spawn } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { RoutedIntent } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
@@ -86,6 +89,26 @@ interface ResearchItem {
   score: number;
   author: string;
   source: string;
+  /** Optional extracted text (e.g. a YouTube transcript) folded into synthesis. */
+  excerpt?: string;
+}
+
+/** Strip a WEBVTT caption file to plain sequential text (no timestamps/tags/dupes). */
+function stripVtt(vtt: string): string {
+  const out: string[] = [];
+  let prev = "";
+  for (let line of vtt.split(/\r?\n/)) {
+    line = line.trim();
+    if (!line) continue;
+    if (/^WEBVTT/i.test(line) || /^(Kind|Language|NOTE)\b/i.test(line)) continue;
+    if (line.includes("-->")) continue; // timestamp cue
+    if (/^\d+$/.test(line)) continue; // cue index
+    line = line.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim(); // inline tags
+    if (!line || line === prev) continue; // dedupe consecutive (auto-sub repeats)
+    out.push(line);
+    prev = line;
+  }
+  return out.join(" ").replace(/\s+/g, " ").trim();
 }
 
 const THIRTY_DAYS_SEC = 30 * 24 * 60 * 60;
@@ -277,21 +300,66 @@ const fetchYouTube: NativeHandler = async (ctx) => {
   try {
     const out = await runCapture(
       "yt-dlp",
-      [`ytsearch8:${topic}`, "--flat-playlist", "--skip-download", "--no-warnings", "--print", "%(title)s\t%(webpage_url)s\t%(view_count)s"],
+      [`ytsearch8:${topic}`, "--flat-playlist", "--skip-download", "--no-warnings", "--print", "%(title)s\t%(id)s\t%(view_count)s"],
       20000,
     );
     const items: ResearchItem[] = out
       .split("\n")
       .map((l) => l.split("\t"))
-      .filter((p) => p.length >= 2 && p[0]?.trim())
+      .filter((p) => p.length >= 2 && p[0]?.trim() && p[1]?.trim())
       .slice(0, 10)
       .map((p) => ({
         title: p[0]!.trim(),
-        url: (p[1] ?? humanUrl).trim(),
+        url: `https://www.youtube.com/watch?v=${p[1]!.trim()}`,
         score: Math.round(Number(p[2] ?? 0)) || 1,
         author: "YouTube",
         source: "YouTube",
       }));
+
+    // Transcript extraction: pull EN captions for the top few by views, strip to
+    // text, and attach as excerpts (folded into synthesis). Absent captions / no
+    // yt-dlp degrade gracefully — items still carry titles/links.
+    const topIds = items
+      .slice()
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map((it) => it.url.split("v=")[1])
+      .filter((id): id is string => Boolean(id));
+    if (topIds.length > 0) {
+      const dir = mkdtempSync(join(tmpdir(), "aos-yt-"));
+      try {
+        await runCapture(
+          "yt-dlp",
+          [
+            "--skip-download", "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,en",
+            "--sub-format", "vtt", "--no-warnings", "-o", join(dir, "%(id)s.%(ext)s"),
+            ...topIds.map((id) => `https://www.youtube.com/watch?v=${id}`),
+          ],
+          45000,
+        );
+        let got = 0;
+        for (const f of readdirSync(dir)) {
+          if (!f.endsWith(".vtt")) continue;
+          const id = f.split(".")[0]!;
+          const text = stripVtt(readFileSync(join(dir, f), "utf8")).slice(0, 1500);
+          const item = items.find((it) => it.url.includes(id));
+          if (item && text && !item.excerpt) {
+            item.excerpt = text;
+            got++;
+          }
+        }
+        ctx.emit(`fetch-youtube: ${got} transcript(s) extracted\n`);
+      } catch (e) {
+        ctx.emit(`fetch-youtube: transcripts skipped (${(e as Error).message})\n`);
+      } finally {
+        try {
+          rmSync(dir, { recursive: true, force: true });
+        } catch {
+          /* temp cleanup best-effort */
+        }
+      }
+    }
+
     collect(ctx, items, { label: `YouTube: ${topic}`, url: humanUrl });
     ctx.emit(`fetch-youtube: ${items.length} videos\n`);
   } catch (err) {
@@ -359,7 +427,11 @@ const synthesizeResearch: NativeHandler = async (ctx) => {
   for (const it of items) if (!byUrl.has(it.url) || byUrl.get(it.url)!.score < it.score) byUrl.set(it.url, it);
   const ranked = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 25);
   const corpus = ranked
-    .map((it, i) => `[${i + 1}] (${it.source}, score ${it.score}) ${it.title} — ${it.url}`)
+    .map(
+      (it, i) =>
+        `[${i + 1}] (${it.source}, score ${it.score}) ${it.title} — ${it.url}` +
+        (it.excerpt ? `\n    transcript: ${it.excerpt}` : ""),
+    )
     .join("\n");
 
   const system =

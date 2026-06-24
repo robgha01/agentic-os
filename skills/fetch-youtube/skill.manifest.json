@@ -1,7 +1,7 @@
 {
   "id": "fetch-youtube",
   "name": "Fetch YouTube",
-  "description": "Sub-skill: searches YouTube via the yt-dlp binary (no key) for the topic and adds video titles/links/view-counts onto the shared composite context. Skips gracefully if yt-dlp isn't installed.",
+  "description": "Sub-skill: searches YouTube via the yt-dlp binary (no key), and for the top videos extracts EN caption transcripts (timestamps/tags stripped) folded into synthesis. Adds titles/links/views + transcript excerpts onto the shared composite context. Skips gracefully if yt-dlp isn't installed or captions are absent.",
   "triggers": ["fetch-youtube"],
   "surfaces": [],
   "modelPolicy": { "execTier": "none", "privacy": "cloud-ok" },
