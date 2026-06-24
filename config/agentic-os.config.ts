@@ -10,7 +10,7 @@
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getValue } from "./config-store.js";
+import { getValue, DATA_DIR } from "./config-store.js";
 
 // Repo root resolved from this file's location (<root>/config/agentic-os.config.ts).
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -157,7 +157,9 @@ function build(): AgenticOsConfig {
     bearerToken: cfgOpt("x.bearerToken", "X_BEARER_TOKEN"),
   },
   vault: {
-    path: cfg("vault.path", "AGENTIC_OS_VAULT_PATH", join(REPO_ROOT, "vault")),
+    // Dev → the repo's vault/ (with its committed seeds). Packaged → the
+    // per-user data dir (~/.agentic-os/vault, alongside config + secrets).
+    path: cfg("vault.path", "AGENTIC_OS_VAULT_PATH", join(isPackaged() ? DATA_DIR : REPO_ROOT, "vault")),
     managedBlocks: cfg("vault.managedBlocks", "AGENTIC_OS_VAULT_MANAGED_BLOCKS", "false") === "true",
   },
   ports: {

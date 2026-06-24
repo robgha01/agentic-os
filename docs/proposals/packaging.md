@@ -50,9 +50,17 @@ The compiled `aos-win-x64.exe` boots with **no Node/npm**, loads **14 skills fro
 embedded manifests**, serves the **embedded HUD** at `/`, and answers `/health`,
 `/skills`, `/config`.
 
+## Data location (per-user)
+All user data lives under **`~/.agentic-os/`** (overridable with `AGENTIC_OS_HOME`):
+`config.json` + `master.key` always, and — **when packaged** — `vault/` too
+(`~/.agentic-os/vault`). In **dev** the vault stays the repo's `vault/` (with its
+committed seeds). Individually overridable via `AGENTIC_OS_CONFIG`,
+`AGENTIC_OS_MASTER_KEY_FILE`, `AGENTIC_OS_VAULT_PATH`. Verified: the Windows
+binary reports `vault.path = C:\Users\<you>\.agentic-os\vault`.
+
 ## Follow-ups
-- Move default config/vault/secret paths to per-user app-data when packaged
-  (currently CWD-relative).
 - CI matrix (win/mac/linux runners) to build + smoke each target.
+- Optionally seed a fresh per-user vault with the `_meta`/`_templates`/`90-maps`
+  reference files on first run (so Obsidian has the structure).
 - Optionally bundle a `yt-dlp` static binary alongside the app.
 - Phase 2 (native window/tray/auto-update) only if needed → Electron.

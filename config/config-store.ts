@@ -23,6 +23,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 const DIR = process.env.AGENTIC_OS_HOME ?? join(homedir(), ".agentic-os");
+/** Per-user data root (config.json, master.key, and the packaged vault live here). */
+export const DATA_DIR = DIR;
 const CONFIG_FILE = process.env.AGENTIC_OS_CONFIG ?? join(DIR, "config.json");
 const KEY_FILE = process.env.AGENTIC_OS_MASTER_KEY_FILE ?? join(DIR, "master.key");
 // Overridable so tests/demos use a throwaway keychain service (the keychain is
