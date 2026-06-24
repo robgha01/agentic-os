@@ -1,0 +1,26 @@
+{
+  "id": "morning-report",
+  "name": "Morning Report",
+  "description": "The morning rundown / daily brief: synthesizes today's operation log and recent vault records into a concise spoken+written summary (a `report` record).",
+  "triggers": ["rundown"],
+  "surfaces": ["deck", "nl"],
+  "presentation": {
+    "label": "Morning Report",
+    "icon": "sun",
+    "group": "Knowledge",
+    "inputs": [
+      { "name": "force", "type": "boolean", "label": "Force refresh", "default": false }
+    ]
+  },
+  "modelPolicy": {
+    "execTier": "light",
+    "privacy": "cloud-ok"
+  },
+  "execution": {
+    "kind": "native",
+    "handler": "morningReport"
+  },
+  "vaultOutput": "03-report/{{date}}.md",
+  "staleAfterMinutes": 720,
+  "produces": { "type": "report", "keyDate": true }
+}

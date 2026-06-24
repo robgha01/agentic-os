@@ -439,6 +439,78 @@ const aiWire: NativeHandler = async (ctx) => {
   return 0;
 };
 
+// --- Morning report (daily brief synthesized from the vault) ----------------
+
+const morningReport: NativeHandler = async (ctx) => {
+  const now = ctx.services.nowIso();
+  const dateKey = (now.split("T")[0] ?? now).slice(0, 10);
+  const vault = ctx.services.vault;
+
+  // Today's operations log (from the daily note) + recent records as raw material.
+  const daily = vault.read("daily", dateKey);
+  const opsLog = daily ? daily.generated.trim() : "";
+  const recent = vault.listRecent(12).filter((r) => r.type !== "daily" && r.type !== "report");
+  const recentLines = recent.length
+    ? recent.map((r) => `- **${r.type}** — ${r.title}`).join("\n")
+    : "- No records yet.";
+
+  let tldr = "";
+  let brief = "";
+  let model: string | undefined;
+  if (ctx.services.llm) {
+    const system = "You are the user's concise, spoken-friendly morning briefer. No fluff, no headings.";
+    const prompt = [
+      `Date: ${dateKey}`,
+      `Today's operation log:`,
+      opsLog || "(nothing logged yet)",
+      ``,
+      `Recent vault records:`,
+      recentLines,
+      ``,
+      `Write a morning brief. The FIRST line is ONE spoken-summary sentence of what matters today.`,
+      `Then a blank line, then 3–6 short markdown bullets ("- ") of highlights drawn from the log/records. No headings.`,
+    ].join("\n");
+    try {
+      const out = (await ctx.services.llm.complete(prompt, { system, maxTokens: 700 })).trim();
+      if (out) {
+        const lines = out.split("\n");
+        const firstIdx = lines.findIndex((l) => l.trim());
+        tldr = (lines[firstIdx] ?? "").replace(/^[-*#>\s]+/, "").trim();
+        brief = lines.slice(firstIdx + 1).join("\n").trim();
+        model = `${ctx.services.llm.model} (${ctx.services.llm.id})`;
+        ctx.emit(`morning-report: synthesized via ${ctx.services.llm.id}\n`);
+      }
+    } catch (err) {
+      ctx.emit(`morning-report: synthesis failed (${(err as Error).message}); using a templated brief\n`);
+    }
+  }
+
+  if (!tldr) tldr = `Morning report for ${dateKey}: ${recent.length} recent record(s)${opsLog ? "" : ", no activity logged yet"}.`;
+  if (!brief) brief = recentLines;
+
+  const title = `Morning Report — ${dateKey}`;
+  const built = buildResultDocument({
+    type: "report",
+    key: dateKey,
+    title,
+    source: "morning-report",
+    tldr,
+    sections: { Brief: brief, Recent: recentLines },
+    status: "complete",
+    confidence: recent.length > 0 ? "medium" : "low",
+    staleAfterMinutes: 720, // ~half a day: a repeat "rundown" the same morning serves the cached brief
+    tags: ["report"],
+    inputs: {},
+    model,
+    links: [dateKey],
+    now,
+  });
+  const path = vault.writeGenerated(built.frontmatter, built.generated);
+  ctx.context.result = { path: vault.toRelative(path), title, type: "report" };
+  ctx.emit(`morning-report: ${recent.length} recent records -> ${path}\n`);
+  return 0;
+};
+
 export const NATIVE_HANDLERS: Record<string, NativeHandler> = {
   fetchHackerNews,
   fetchReddit,
@@ -446,4 +518,5 @@ export const NATIVE_HANDLERS: Record<string, NativeHandler> = {
   compileResearch,
   inboxTriage,
   aiWire,
+  morningReport,
 };

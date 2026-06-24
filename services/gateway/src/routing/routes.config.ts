@@ -22,10 +22,12 @@ export interface RouteRule {
 export const ROUTES: readonly RouteRule[] = [
   {
     id: "rundown",
-    pattern: /\b(rundown|run[\s-]?down|morning (?:brief|report)|brief me)\b/i,
+    // Tight, unambiguous phrasings only — bare "brief"/"update" are too common
+    // and would false-fire, so they're anchored ("morning brief", "daily update").
+    pattern: /\b(rundown|run[\s-]?down|morning (?:brief|report|update)|daily (?:brief|update|rundown)|brief me)\b/i,
     action: "rundown",
     priority: 100,
-    examples: ["give me the rundown", "rundown", "brief me", "morning report"],
+    examples: ["give me the rundown", "rundown", "brief me", "morning report", "daily update", "morning brief"],
   },
   {
     id: "sync",
