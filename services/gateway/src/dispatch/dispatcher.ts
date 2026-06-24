@@ -58,11 +58,10 @@ export class Dispatcher {
    * Natural-language path: resolve an utterance through the router, then run
    * the bound skill. Returns the operation id.
    */
-  async dispatch(input: string): Promise<string> {
+  async dispatch(input: string, opId: string = randomUUID()): Promise<string> {
     const intent = await this.router.route(input);
     this.bus.emit({ type: "routing.resolved", at: now(), intent });
 
-    const opId = randomUUID();
     const skill = this.loader.forAction(intent.actionId);
 
     // No skill bound — acknowledge and stop (not an error).
@@ -97,8 +96,8 @@ export class Dispatcher {
     skillId: string,
     params: Record<string, unknown> = {},
     opts: { requireDeck?: boolean } = {},
+    opId: string = randomUUID(),
   ): Promise<string> {
-    const opId = randomUUID();
     const skill = this.loader.get(skillId);
 
     if (!skill) {

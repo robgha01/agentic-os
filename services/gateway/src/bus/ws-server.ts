@@ -5,6 +5,7 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientCommand, OsEvent } from "@aos/shared";
@@ -38,6 +39,7 @@ export class GatewayServer {
     private readonly onSettingsChange?: () => Promise<void>,
     private readonly speak?: (text: string) => void,
     private readonly providers?: () => import("@aos/shared").ProviderReadiness[],
+    private readonly scheduler?: import("../dispatch/scheduler.js").Scheduler,
   ) {
     // Localhost single-user tool: allow the HUD (served from a dev/other port)
     // to read these GET endpoints cross-origin.
@@ -116,6 +118,7 @@ export class GatewayServer {
             // Model providers + their live readiness, and the execution preference.
             providers: this.providers?.() ?? [],
             models: { fallbackOrder: config.models.fallbackOrder, disabled: config.models.disabled },
+            tasks: { maxConcurrent: config.tasks.maxConcurrent },
             openai: { baseUrl: config.openai.baseUrl, model: config.openai.model },
             ollama: { baseUrl: config.ollama.baseUrl, model: config.ollama.model },
             vault: { path: config.vault.path },
@@ -192,14 +195,14 @@ export class GatewayServer {
         this.send(ws, { type: "notification", at: new Date().toISOString(), level: "info", message: "pong" });
         return;
       case "route":
-        // Events flow back over the broadcast subscription; don't await here.
-        void this.dispatcher.dispatch(cmd.input).catch((err) => this.emitDispatchError(err));
+        // Queue (concurrency-limited); events flow back over the broadcast sub.
+        this.run("route", cmd.input, (opId) => this.dispatcher.dispatch(cmd.input, opId));
         return;
       case "invoke":
         // Command-deck button: deterministic, deck-gated invoke.
-        void this.dispatcher
-          .invoke(cmd.skillId, cmd.params ?? {}, { requireDeck: true })
-          .catch((err) => this.emitDispatchError(err));
+        this.run("invoke", cmd.skillId, (opId) =>
+          this.dispatcher.invoke(cmd.skillId, cmd.params ?? {}, { requireDeck: true }, opId),
+        );
         return;
       case "speak":
         // Read a record's spoken core (TL;DR blockquote) aloud.
@@ -208,6 +211,13 @@ export class GatewayServer {
       default:
         this.send(ws, { type: "notification", at: new Date().toISOString(), level: "error", message: "unknown command" });
     }
+  }
+
+  /** Run a command through the scheduler (concurrency-limited) when present. */
+  private run(kind: "route" | "invoke", label: string, exec: (opId: string) => Promise<unknown>): void {
+    const guarded = (opId: string) => Promise.resolve(exec(opId)).catch((err) => this.emitDispatchError(err));
+    if (this.scheduler) this.scheduler.submit(guarded, { kind, label });
+    else void guarded(randomUUID());
   }
 
   private speakDocument(path: string): void {

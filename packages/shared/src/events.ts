@@ -32,6 +32,8 @@ export interface OperationDescriptor {
 /** Everything the gateway can announce. `at` is an ISO-8601 timestamp. */
 export type OsEvent =
   | { type: "routing.resolved"; at: string; intent: RoutedIntent }
+  /** Accepted into the queue but not yet running (concurrency limit). */
+  | { type: "operation.queued"; at: string; opId: string; label: string; kind: "route" | "invoke" }
   | { type: "operation.started"; at: string; op: OperationDescriptor }
   | {
       type: "operation.output";

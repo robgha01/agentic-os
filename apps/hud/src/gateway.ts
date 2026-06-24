@@ -48,6 +48,7 @@ export interface ConfigView {
   research: { sources: { id: string; label: string; auth: string }[] };
   providers: ProviderStatus[];
   models: { fallbackOrder: string[]; disabled: string[] };
+  tasks: { maxConcurrent: number };
   openai: { baseUrl: string; model: string };
   ollama: { baseUrl: string; model: string };
   vault: { path: string };

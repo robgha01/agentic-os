@@ -45,6 +45,7 @@ export const EDITABLE_KEYS = [
   "ollama.model",
   "models.fallbackOrder",
   "models.disabled",
+  "tasks.maxConcurrent",
 ] as const;
 export type EditableKey = (typeof EDITABLE_KEYS)[number];
 

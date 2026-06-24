@@ -18,7 +18,12 @@ function Vitals({ hud }: { hud: HudState }) {
         {stat("skills", hud.skills.length)}
       </div>
       <Sparkline data={hud.signalSeries} />
-      <div className="vitals__rate">signal rate · 2s buckets</div>
+      <div className="vitals__rate">
+        signal rate · 2s buckets
+        {hud.running + hud.queued > 0 ? (
+          <span className="vitals__queue"> · running {hud.running} · queued {hud.queued}</span>
+        ) : null}
+      </div>
     </div>
   );
 }
