@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import type { ClientCommand, OsEvent } from "@aos/shared";
+import { parseClientCommand, type OsEvent } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import {
   editableView,
@@ -23,6 +23,7 @@ import type { SkillLoader } from "../skills/skill-loader.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
 import { extractSpokenCore } from "../memory/document-builder.js";
 import { serveHud } from "./static-hud.js";
+import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
 import type { EventBus } from "./event-bus.js";
 
 export class GatewayServer {
@@ -42,15 +43,27 @@ export class GatewayServer {
     private readonly providers?: () => import("@aos/shared").ProviderReadiness[],
     private readonly scheduler?: import("../dispatch/scheduler.js").Scheduler,
   ) {
-    // Localhost single-user tool: allow the HUD (served from a dev/other port)
-    // to read these GET endpoints cross-origin.
-    const cors = { "access-control-allow-origin": "*" };
-    const json = (res: import("node:http").ServerResponse, body: unknown, code = 200) => {
-      res.writeHead(code, { "content-type": "application/json", ...cors });
-      res.end(JSON.stringify(body));
+    // Localhost single-user tool: only LOCAL origins may read cross-origin
+    // (the HUD dev server on :5173). Anything else gets no CORS grant.
+    const corsFor = (req: import("node:http").IncomingMessage): Record<string, string> => {
+      const origin = req.headers.origin;
+      return origin && isLocalOrigin(origin)
+        ? { "access-control-allow-origin": origin, vary: "origin" }
+        : {};
     };
 
     this.http = createServer((req, res) => {
+      const cors = corsFor(req);
+      const json = (res2: import("node:http").ServerResponse, body: unknown, code = 200) => {
+        res2.writeHead(code, { "content-type": "application/json", ...cors });
+        res2.end(JSON.stringify(body));
+      };
+
+      // DNS-rebinding defense: the Host header must name this machine.
+      if (!isLocalHostHeader(req.headers.host)) {
+        return json(res, { error: "forbidden host" }, 403);
+      }
+
       const url = new URL(req.url ?? "/", "http://localhost");
 
       // CORS preflight for the POST below.
@@ -68,9 +81,17 @@ export class GatewayServer {
       // keychained, never echoed back).
       if (req.method === "POST" && (url.pathname === "/settings" || url.pathname === "/secrets")) {
         const wantSecret = url.pathname === "/secrets";
+        const MAX_BODY = 64 * 1024;
         let body = "";
-        req.on("data", (c) => (body += c));
+        req.on("data", (c) => {
+          body += c;
+          if (body.length > MAX_BODY) {
+            json(res, { ok: false, error: "body too large" }, 413);
+            req.destroy();
+          }
+        });
         req.on("end", () => {
+          if (res.writableEnded) return;
           try {
             const input = JSON.parse(body || "{}") as Record<string, unknown>;
             const allowed: Record<string, unknown> = {};
@@ -154,7 +175,12 @@ export class GatewayServer {
           return void serveHud(url.pathname, res, cors);
       }
     });
-    this.wss = new WebSocketServer({ server: this.http });
+    this.wss = new WebSocketServer({
+      server: this.http,
+      // Reject browser connections from non-local pages; non-browser clients
+      // (no Origin header) are allowed.
+      verifyClient: (info: { origin?: string }) => isLocalOrigin(info.origin || undefined),
+    });
   }
 
   /** The actual listening port (useful when requestedPort is 0). */
@@ -188,11 +214,17 @@ export class GatewayServer {
   }
 
   private onMessage(ws: WebSocket, raw: string): void {
-    let cmd: ClientCommand;
+    let parsed: unknown;
     try {
-      cmd = JSON.parse(raw) as ClientCommand;
+      parsed = JSON.parse(raw);
     } catch {
       this.send(ws, { type: "notification", at: new Date().toISOString(), level: "error", message: "invalid command JSON" });
+      return;
+    }
+    // Schema-validate before dispatch — malformed frames never reach the router.
+    const cmd = parseClientCommand(parsed);
+    if (!cmd) {
+      this.send(ws, { type: "notification", at: new Date().toISOString(), level: "error", message: "unknown or malformed command" });
       return;
     }
 
