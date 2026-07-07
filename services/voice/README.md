@@ -49,7 +49,31 @@ Point elsewhere with `AGENTIC_OS_TTS_KOKORO_ONNX_MODEL` /
 whose message names the exact file and download URL (the gateway then falls back
 to text).
 
-## Run
+## Guided setup (from the HUD)
+
+Options → Voice → **guided setup** composes everything from your engine choice —
+no need to hand-pick packages:
+
+- **Detected Python** — the gateway resolves an interpreter (`voice.pythonPath`
+  if set → a project `.venv`/`venv` → a PATH `python`/`python3`/`py`), so
+  **pyenv, uv, conda, and system Python all work** without a venv. It also detects
+  `uv` and shows the version. Override the interpreter in the panel if needed.
+- **Install command** — the *minimal* set for your TTS/STT choice (e.g.
+  kokoro-onnx pulls `kokoro-onnx onnxruntime`, **not** torch), in `uv pip install`
+  or `pip install` form (defaults to uv when detected). Copy, run it once in your
+  environment.
+- **Start/Stop sidecar** — the gateway launches `server.py` with the detected
+  interpreter and supervises it: a graceful gateway stop kills it, and a
+  parent-death watchdog makes a gateway-spawned sidecar self-exit even on a crash
+  (a sidecar you start by hand runs independently). Then use **Download models**
+  and **Install misaki** in the rows above.
+
+Per-engine deps (the composer picks these): `kokoro` → `kokoro`(torch);
+`kokoro-onnx` → `kokoro-onnx onnxruntime`; `openai`/`elevenlabs` → their SDK;
+STT `faster-whisper`/`openai`/`none`. Base always includes `fastapi uvicorn
+python-multipart soundfile numpy`.
+
+## Run (manual)
 
 ```bash
 cd services/voice
