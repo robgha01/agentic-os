@@ -320,6 +320,21 @@ a { color: var(--magenta); }
   color: var(--violet); font-size: 12px; opacity: 0.85;
 }
 
+/* ---- Widget tray (benched widgets; drag onto a slot to swap in) ---- */
+.wtray { position: absolute; left: 12px; bottom: 64px; z-index: 5; font-family: var(--mono); }
+.wtray__toggle {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--mute);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer;
+}
+.wtray__toggle:hover { color: var(--ink); border-color: var(--magenta); }
+.wtray__list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wtray__chip {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink);
+  background: color-mix(in srgb, var(--panel-2) 90%, transparent); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 10px; cursor: grab;
+}
+.wtray__chip:hover { border-color: var(--magenta); }
+
 /* ---- Widgets ---- */
 .empty { color: var(--mute); font-size: 12px; line-height: 1.5; }
 

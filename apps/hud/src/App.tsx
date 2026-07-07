@@ -12,6 +12,7 @@ import { AuthPrompt } from "./components/AuthPrompt.js";
 import { DocViewer } from "./components/DocViewer.js";
 import { ContextCards } from "./components/ContextCards.js";
 import { Options } from "./components/Options.js";
+import { WidgetTray } from "./components/WidgetTray.js";
 import { useGateway } from "./useGateway.js";
 import {
   loadWorkspace, saveWorkspace, moveWidget, placeWidget, removeWidget,
@@ -68,6 +69,7 @@ export function App() {
           </main>
 
           <CommandBar hud={hud} />
+          <WidgetTray unplaced={unplaced} />
         </div>
       ) : (
         <Options hud={hud} />

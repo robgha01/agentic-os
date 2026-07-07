@@ -64,8 +64,10 @@ export function Panel({ side, slots, layout, hud, unplaced, onMove, onAdd, onRem
             onDrop={(e) => {
               e.preventDefault();
               setDragOver(null);
-              const from = e.dataTransfer.getData("text/slot") as SlotId;
-              if (from) onMove(from, slot);
+              const fromSlot = e.dataTransfer.getData("text/slot") as SlotId;
+              const widget = e.dataTransfer.getData("text/widget") as WidgetId;
+              if (fromSlot) onMove(fromSlot, slot);
+              else if (widget) onAdd(slot, widget);
             }}
           >
             {widget && def ? (
