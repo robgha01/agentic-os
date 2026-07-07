@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import type { ClientCommand, OsEvent } from "@aos/shared";
+import { parseClientCommand, type OsEvent } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import {
   editableView,
@@ -23,6 +23,7 @@ import type { SkillLoader } from "../skills/skill-loader.js";
 import type { VaultAdapter } from "../memory/vault-adapter.js";
 import { extractSpokenCore } from "../memory/document-builder.js";
 import { serveHud } from "./static-hud.js";
+import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
 import type { EventBus } from "./event-bus.js";
 
 export class GatewayServer {
@@ -42,15 +43,32 @@ export class GatewayServer {
     private readonly providers?: () => import("@aos/shared").ProviderReadiness[],
     private readonly scheduler?: import("../dispatch/scheduler.js").Scheduler,
   ) {
-    // Localhost single-user tool: allow the HUD (served from a dev/other port)
-    // to read these GET endpoints cross-origin.
-    const cors = { "access-control-allow-origin": "*" };
-    const json = (res: import("node:http").ServerResponse, body: unknown, code = 200) => {
-      res.writeHead(code, { "content-type": "application/json", ...cors });
-      res.end(JSON.stringify(body));
+    // Localhost single-user tool by default: only LOCAL origins may read
+    // cross-origin (the HUD dev server on :5173). Anything else gets no CORS
+    // grant — unless the user opts into remote access (trusted-LAN), which
+    // reflects any origin. Read live so an Options toggle applies without restart.
+    const allowRemote = () => config.security.allowRemoteAccess;
+    const originOk = (origin: string | undefined) => allowRemote() || isLocalOrigin(origin);
+    const corsFor = (req: import("node:http").IncomingMessage): Record<string, string> => {
+      const origin = req.headers.origin;
+      return origin && originOk(origin)
+        ? { "access-control-allow-origin": origin, vary: "origin" }
+        : {};
     };
 
     this.http = createServer((req, res) => {
+      const cors = corsFor(req);
+      const json = (res2: import("node:http").ServerResponse, body: unknown, code = 200) => {
+        res2.writeHead(code, { "content-type": "application/json", ...cors });
+        res2.end(JSON.stringify(body));
+      };
+
+      // DNS-rebinding defense: the Host header must name this machine, unless the
+      // user has opted into remote access (LAN/hostname).
+      if (!allowRemote() && !isLocalHostHeader(req.headers.host)) {
+        return json(res, { error: "forbidden host — the gateway serves localhost only (enable security.allowRemoteAccess for LAN access)" }, 403);
+      }
+
       const url = new URL(req.url ?? "/", "http://localhost");
 
       // CORS preflight for the POST below.
@@ -67,10 +85,32 @@ export class GatewayServer {
       // takes non-secret editable keys; /secrets takes secret keys (encrypted /
       // keychained, never echoed back).
       if (req.method === "POST" && (url.pathname === "/settings" || url.pathname === "/secrets")) {
+        // CSRF gate: a cross-site page can fire a non-preflighted "simple" POST
+        // (e.g. content-type text/plain) that the Host check alone won't stop —
+        // browsers always attach the page's Origin to cross-origin POSTs, so a
+        // non-local Origin is rejected outright. Absent Origin = CLI/same-origin.
+        // (Remote-access mode relaxes this to any origin — trusted-LAN only.)
+        if (!originOk(req.headers.origin)) {
+          return json(res, { ok: false, error: "forbidden origin" }, 403);
+        }
         const wantSecret = url.pathname === "/secrets";
+        const MAX_BODY = 64 * 1024;
         let body = "";
-        req.on("data", (c) => (body += c));
+        let tooLarge = false;
+        req.on("data", (c) => {
+          if (tooLarge) return;
+          body += c;
+          if (body.length > MAX_BODY) {
+            tooLarge = true;
+            body = "";
+            // Respond first, then sever once the 413 has flushed — destroying
+            // the socket immediately would reset the connection mid-response.
+            res.once("finish", () => req.destroy());
+            json(res, { ok: false, error: "body too large" }, 413);
+          }
+        });
         req.on("end", () => {
+          if (res.writableEnded) return;
           try {
             const input = JSON.parse(body || "{}") as Record<string, unknown>;
             const allowed: Record<string, unknown> = {};
@@ -108,7 +148,9 @@ export class GatewayServer {
             mail: {
               provider: config.mail.provider,
               tokenSource: config.mail.tokenSource,
-              signedIn: config.mail.provider === "outlook" && existsSync(config.mail.tokenStorePath),
+              signedIn:
+                config.mail.provider === "outlook" &&
+                (secretPresence()["mail.refreshToken"] || existsSync(config.mail.tokenStorePath)),
             },
             research: {
               sources: [
@@ -124,6 +166,7 @@ export class GatewayServer {
             providers: this.providers?.() ?? [],
             models: { fallbackOrder: config.models.fallbackOrder, disabled: config.models.disabled },
             tasks: { maxConcurrent: config.tasks.maxConcurrent },
+            security: { allowRemoteAccess: config.security.allowRemoteAccess },
             ui: { launch: config.ui.launch, browser: config.ui.browser },
             openai: { baseUrl: config.openai.baseUrl, model: config.openai.model },
             ollama: { baseUrl: config.ollama.baseUrl, model: config.ollama.model },
@@ -154,7 +197,12 @@ export class GatewayServer {
           return void serveHud(url.pathname, res, cors);
       }
     });
-    this.wss = new WebSocketServer({ server: this.http });
+    this.wss = new WebSocketServer({
+      server: this.http,
+      // Reject browser connections from non-local pages; non-browser clients
+      // (no Origin header) are allowed. Remote-access mode relaxes this (LAN).
+      verifyClient: (info: { origin?: string }) => originOk(info.origin || undefined),
+    });
   }
 
   /** The actual listening port (useful when requestedPort is 0). */
@@ -188,11 +236,17 @@ export class GatewayServer {
   }
 
   private onMessage(ws: WebSocket, raw: string): void {
-    let cmd: ClientCommand;
+    let parsed: unknown;
     try {
-      cmd = JSON.parse(raw) as ClientCommand;
+      parsed = JSON.parse(raw);
     } catch {
       this.send(ws, { type: "notification", at: new Date().toISOString(), level: "error", message: "invalid command JSON" });
+      return;
+    }
+    // Schema-validate before dispatch — malformed frames never reach the router.
+    const cmd = parseClientCommand(parsed);
+    if (!cmd) {
+      this.send(ws, { type: "notification", at: new Date().toISOString(), level: "error", message: "unknown or malformed command" });
       return;
     }
 

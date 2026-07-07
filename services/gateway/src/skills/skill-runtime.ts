@@ -13,11 +13,11 @@
  * The op lifecycle (completed/failed) is emitted once, at the top level — sub-
  * steps only stream output under the same opId.
  */
-import { spawn } from "node:child_process";
 import type { ModelSelection, OperationResult, RoutedIntent, SkillManifest } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import { EventBus, now } from "../bus/event-bus.js";
 import { createLlmForSelection } from "../llm/llm-service.js";
+import { runProcess } from "../util/run-process.js";
 import { NATIVE_HANDLERS, type SkillServices } from "./native-registry.js";
 import type { SkillLoader } from "./skill-loader.js";
 
@@ -80,12 +80,17 @@ export class SkillRuntime {
       case "claude-headless": {
         const model = selection?.model ?? config.anthropic.heavyModel;
         const prompt = renderTemplate(exec.promptTemplate, intent.parameters);
-        return this.spawnCollect(opId, config.claudeCode.bin, ["-p", "--model", model, ...exec.args], prompt);
+        // shell:true so Windows resolves the `claude.cmd` shim; prompt via stdin, never argv.
+        return this.spawnCollect(opId, config.claudeCode.bin, ["-p", "--model", model, ...exec.args], {
+          stdin: prompt,
+          shell: true,
+          timeoutMs: exec.timeoutMs,
+        });
       }
 
       case "process": {
         const args = exec.args.map((a) => renderTemplate(a, intent.parameters));
-        return this.spawnCollect(opId, exec.command, args);
+        return this.spawnCollect(opId, exec.command, args, { timeoutMs: exec.timeoutMs });
       }
 
       case "native": {
@@ -122,35 +127,31 @@ export class SkillRuntime {
     }
   }
 
+  /**
+   * Skills may run long (a headless ship-ticket implements a whole change), so
+   * the hang-protection default is generous; a manifest sets `timeoutMs` to
+   * tighten or extend it per skill.
+   */
+  private static readonly DEFAULT_SKILL_TIMEOUT_MS = 60 * 60_000;
+
   /** Spawn a child, stream its stdio to the bus, resolve with a StepResult. */
-  private spawnCollect(
+  private async spawnCollect(
     opId: string,
     command: string,
     args: string[],
-    stdin?: string,
+    opts: { stdin?: string; timeoutMs?: number; shell?: boolean } = {},
   ): Promise<StepResult> {
-    return new Promise((resolve) => {
-      let settled = false;
-      const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"] });
-
-      child.stdout.on("data", (d: Buffer) => this.output(opId, "stdout", d.toString()));
-      child.stderr.on("data", (d: Buffer) => this.output(opId, "stderr", d.toString()));
-
-      child.on("error", (err) => {
-        if (settled) return;
-        settled = true;
-        resolve({ ok: false, exitCode: null, error: `failed to spawn "${command}": ${err.message}` });
-      });
-
-      child.on("close", (code) => {
-        if (settled) return;
-        settled = true;
-        resolve({ ok: code === 0, exitCode: code });
-      });
-
-      if (stdin !== undefined) child.stdin.write(stdin);
-      child.stdin.end();
+    const r = await runProcess(command, args, {
+      stdin: opts.stdin,
+      shell: opts.shell,
+      timeoutMs: opts.timeoutMs ?? SkillRuntime.DEFAULT_SKILL_TIMEOUT_MS,
+      onOutput: (stream, chunk) => this.output(opId, stream, chunk),
+      // Output is streamed to the bus; don't also buffer it for the whole run.
+      capture: false,
     });
+    if (r.spawnError) return { ok: false, exitCode: null, error: `failed to spawn "${command}": ${r.spawnError}` };
+    if (r.timedOut) return { ok: false, exitCode: null, error: `"${command}" timed out and was killed` };
+    return { ok: r.code === 0, exitCode: r.code };
   }
 
   private output(opId: string, stream: "stdout" | "stderr", chunk: string): void {

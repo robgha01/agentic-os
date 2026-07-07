@@ -22,5 +22,5 @@
     "promptTemplate": "Work the Jira ticket {{ticketId}}: create a branch, implement the change, run tests, and prepare it to ship.",
     "args": ["--model", "claude-opus-4-8"]
   },
-  "vaultOutput": "tickets/{{ticketId}}.md"
+  "vaultOutput": "30-tickets/{{ticketId}}.md"
 }

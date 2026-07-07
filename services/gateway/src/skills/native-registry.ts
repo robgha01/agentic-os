@@ -9,7 +9,6 @@
  * Research pipeline (keyless): fetchHackerNews + fetchReddit append to a shared
  * item list, then compileResearch writes one cited research record.
  */
-import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +18,8 @@ import type { VaultAdapter } from "../memory/vault-adapter.js";
 import type { MailProvider } from "../mail/mail-provider.js";
 import type { LlmService } from "../llm/llm-service.js";
 import { buildResultDocument, type SourceRef } from "../memory/document-builder.js";
+import { runProcess } from "../util/run-process.js";
+import { dedupeRank, splitTags, stripVtt, type ResearchItem } from "./research-utils.js";
 
 /** A research source the user has switched off (skipped by its fetcher). */
 function sourceDisabled(id: string): boolean {
@@ -34,39 +35,18 @@ function sourceDisabled(id: string): boolean {
  * query) intact. IMPORTANT: callers must keep `%` out of args — cmd.exe mangles
  * yt-dlp's `%(...)s` templates — so we use --dump-json + a literal -o base.
  */
-function runCapture(bin: string, args: string[], timeoutMs: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let out = "";
-    let err = "";
-    let settled = false;
-    // Windows: run via cmd /c with the command + args as SEPARATE argv elements,
-    // so Node does its (correct) per-arg quoting and cmd resolves PATH shims
-    // (pyenv). POSIX: spawn the binary directly. Either way args pass intact.
-    const child =
-      process.platform === "win32"
-        ? spawn("cmd", ["/d", "/s", "/c", bin, ...args], { shell: false })
-        : spawn(bin, args, { shell: false });
-    const timer = setTimeout(() => {
-      settled = true;
-      child.kill("SIGKILL");
-      reject(new Error(`${bin} timed out`));
-    }, timeoutMs);
-    child.stdout.on("data", (d: Buffer) => (out += d.toString()));
-    child.stderr.on("data", (d: Buffer) => (err += d.toString()));
-    child.on("error", (e) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(new Error(`spawn failed: ${e.message}`));
-    });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (code === 0) resolve(out.trim());
-      else reject(new Error(err.trim() || `exit ${code}`));
-    });
-  });
+async function runCapture(bin: string, args: string[], timeoutMs: number): Promise<string> {
+  // Windows: run via cmd /c with the command + args as SEPARATE argv elements,
+  // so Node does its (correct) per-arg quoting and cmd resolves PATH shims
+  // (pyenv). POSIX: spawn the binary directly. Either way args pass intact.
+  const r =
+    process.platform === "win32"
+      ? await runProcess("cmd", ["/d", "/s", "/c", bin, ...args], { timeoutMs })
+      : await runProcess(bin, args, { timeoutMs });
+  if (r.spawnError) throw new Error(`spawn failed: ${r.spawnError}`);
+  if (r.timedOut) throw new Error(`${bin} timed out`);
+  if (r.code !== 0) throw new Error(r.stderr.trim() || `exit ${r.code}`);
+  return r.stdout.trim();
 }
 
 /** Services the gateway injects into every native handler. */
@@ -94,53 +74,9 @@ export interface NativeHandlerContext {
 /** Returns an exit-code-like number (0 = success). */
 export type NativeHandler = (ctx: NativeHandlerContext) => Promise<number>;
 
-// --- Shared research item model --------------------------------------------
-
-interface ResearchItem {
-  title: string;
-  url: string;
-  score: number;
-  author: string;
-  source: string;
-  /** Optional extracted text (e.g. a YouTube transcript) folded into synthesis. */
-  excerpt?: string;
-}
-
-/** Strip a WEBVTT caption file to plain sequential text (no timestamps/tags/dupes). */
-function stripVtt(vtt: string): string {
-  const out: string[] = [];
-  let prev = "";
-  for (let line of vtt.split(/\r?\n/)) {
-    line = line.trim();
-    if (!line) continue;
-    if (/^WEBVTT/i.test(line) || /^(Kind|Language|NOTE)\b/i.test(line)) continue;
-    if (line.includes("-->")) continue; // timestamp cue
-    if (/^\d+$/.test(line)) continue; // cue index
-    line = line.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim(); // inline tags
-    if (!line || line === prev) continue; // dedupe consecutive (auto-sub repeats)
-    out.push(line);
-    prev = line;
-  }
-  return out.join(" ").replace(/\s+/g, " ").trim();
-}
+// --- Shared research item model (see research-utils.ts for the pure helpers) --
 
 const THIRTY_DAYS_SEC = 30 * 24 * 60 * 60;
-
-/**
- * Split a trailing "TAGS: a, b, c" line off an LLM response, returning the body
- * without it plus up to 6 kebab-case tags. Lets the model categorize its own
- * result (per-result tags) without a second call.
- */
-function splitTags(text: string): { body: string; tags: string[] } {
-  const m = text.match(/^[ \t>*-]*tags?\s*:\s*(.+)$/im);
-  if (!m) return { body: text.trim(), tags: [] };
-  const tags = (m[1] ?? "")
-    .split(/[,#]/)
-    .map((t) => t.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""))
-    .filter(Boolean)
-    .slice(0, 6);
-  return { body: text.replace(m[0], "").trim(), tags };
-}
 
 /** Push items + a search-link source onto the shared context. */
 function collect(ctx: NativeHandlerContext, items: ResearchItem[], source: SourceRef): void {
@@ -148,6 +84,40 @@ function collect(ctx: NativeHandlerContext, items: ResearchItem[], source: Sourc
   ctx.context.researchItems = [...existing, ...items];
   const sources = (ctx.context.searchSources as SourceRef[] | undefined) ?? [];
   ctx.context.searchSources = [...sources, source];
+}
+
+/**
+ * Shared fetcher shell: disabled guard, collect + emit on success,
+ * collect-empty + emit on failure. Every source keeps only its parsing.
+ * Failures NEVER fail the composite — a dead source just contributes nothing.
+ */
+async function runFetcher(
+  ctx: NativeHandlerContext,
+  opts: {
+    /** config.research.disabled id, e.g. "hackernews". */
+    id: string;
+    /** emit prefix, e.g. "fetch-hackernews". */
+    name: string;
+    /** SourceRef label for the record's Sources section. */
+    label: string;
+    humanUrl: string;
+    /** Unit for the success line, e.g. "stories". */
+    unit: string;
+    fetchItems: () => Promise<ResearchItem[]>;
+  },
+): Promise<number> {
+  // The research-source toggles gate the research pipeline only; a skill that
+  // reuses fetchers as its own data source (ai-wire) opts out via the context.
+  if (ctx.context.bypassSourceToggles !== true && sourceDisabled(opts.id)) return 0;
+  try {
+    const items = await opts.fetchItems();
+    collect(ctx, items, { label: opts.label, url: opts.humanUrl });
+    ctx.emit(`${opts.name}: ${items.length} ${opts.unit}\n`);
+  } catch (err) {
+    collect(ctx, [], { label: opts.label, url: opts.humanUrl });
+    ctx.emit(`${opts.name}: failed (${(err as Error).message})\n`);
+  }
+  return 0;
 }
 
 // --- Hacker News (public Algolia API, no key) ------------------------------
@@ -162,7 +132,7 @@ interface AlgoliaHit {
 
 const fetchHackerNews: NativeHandler = async (ctx) => {
   const topic = String(ctx.params.topic ?? "").trim();
-  if (!topic) return 1;
+  if (!topic) return 0;
 
   const cutoff = Math.floor(Date.parse(ctx.services.nowIso()) / 1000) - THIRTY_DAYS_SEC;
   const apiUrl =
@@ -170,24 +140,25 @@ const fetchHackerNews: NativeHandler = async (ctx) => {
     `&query=${encodeURIComponent(topic)}&numericFilters=created_at_i>${cutoff}&hitsPerPage=20`;
   const humanUrl = `https://hn.algolia.com/?query=${encodeURIComponent(topic)}&dateRange=pastMonth&type=story`;
 
-  try {
-    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as { hits?: AlgoliaHit[] };
-    const items: ResearchItem[] = (data.hits ?? []).map((h) => ({
-      title: h.title ?? "(untitled)",
-      url: h.url ?? `https://news.ycombinator.com/item?id=${h.objectID}`,
-      score: h.points ?? 0,
-      author: h.author ?? "unknown",
-      source: "Hacker News",
-    }));
-    collect(ctx, items, { label: `Hacker News search: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-hackernews: ${items.length} stories\n`);
-  } catch (err) {
-    collect(ctx, [], { label: `Hacker News search: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-hackernews: failed (${(err as Error).message})\n`);
-  }
-  return 0;
+  return runFetcher(ctx, {
+    id: "hackernews",
+    name: "fetch-hackernews",
+    label: `Hacker News search: ${topic}`,
+    humanUrl,
+    unit: "stories",
+    fetchItems: async () => {
+      const res = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { hits?: AlgoliaHit[] };
+      return (data.hits ?? []).map((h) => ({
+        title: h.title ?? "(untitled)",
+        url: h.url ?? `https://news.ycombinator.com/item?id=${h.objectID}`,
+        score: h.points ?? 0,
+        author: h.author ?? "unknown",
+        source: "Hacker News",
+      }));
+    },
+  });
 };
 
 // --- Reddit (public .json, no key) -----------------------------------------
@@ -198,206 +169,211 @@ interface RedditChild {
 
 const fetchReddit: NativeHandler = async (ctx) => {
   const topic = String(ctx.params.topic ?? "").trim();
-  if (!topic) return 1;
+  if (!topic) return 0;
 
   const apiUrl =
     `https://www.reddit.com/search.json?q=${encodeURIComponent(topic)}` +
     `&sort=top&t=month&limit=15&type=link`;
   const humanUrl = `https://www.reddit.com/search/?q=${encodeURIComponent(topic)}&sort=top&t=month`;
 
-  try {
-    const res = await fetch(apiUrl, {
-      headers: { "user-agent": "agentic-os/0.1 (research skill)" },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as { data?: { children?: RedditChild[] } };
-    const items: ResearchItem[] = (data.data?.children ?? [])
-      .map((c) => c.data)
-      .filter((d): d is NonNullable<RedditChild["data"]> => Boolean(d?.title))
-      .map((d) => ({
-        title: d.title ?? "(untitled)",
-        url: d.permalink ? `https://www.reddit.com${d.permalink}` : d.url ?? humanUrl,
-        score: d.ups ?? 0,
-        author: d.author ?? "unknown",
-        source: "Reddit",
-      }));
-    collect(ctx, items, { label: `Reddit search: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-reddit: ${items.length} posts\n`);
-  } catch (err) {
-    collect(ctx, [], { label: `Reddit search: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-reddit: failed (${(err as Error).message})\n`);
-  }
-  return 0;
+  return runFetcher(ctx, {
+    id: "reddit",
+    name: "fetch-reddit",
+    label: `Reddit search: ${topic}`,
+    humanUrl,
+    unit: "posts",
+    fetchItems: async () => {
+      const res = await fetch(apiUrl, {
+        headers: { "user-agent": "agentic-os/0.1 (research skill)" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { data?: { children?: RedditChild[] } };
+      return (data.data?.children ?? [])
+        .map((c) => c.data)
+        .filter((d): d is NonNullable<RedditChild["data"]> => Boolean(d?.title))
+        .map((d) => ({
+          title: d.title ?? "(untitled)",
+          url: d.permalink ? `https://www.reddit.com${d.permalink}` : d.url ?? humanUrl,
+          score: d.ups ?? 0,
+          author: d.author ?? "unknown",
+          source: "Reddit",
+        }));
+    },
+  });
 };
 
 // --- Polymarket (keyless gamma API) — prediction-market signal -------------
 
 const fetchPolymarket: NativeHandler = async (ctx) => {
-  if (sourceDisabled("polymarket")) return 0;
   const topic = String(ctx.params.topic ?? "").trim();
   if (!topic) return 0;
   const terms = topic.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
   const humanUrl = `https://polymarket.com/markets?_q=${encodeURIComponent(topic)}`;
-  try {
-    const res = await fetch(
-      "https://gamma-api.polymarket.com/markets?closed=false&active=true&limit=120&order=volume&ascending=false",
-      { signal: AbortSignal.timeout(8000) },
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = (await res.json()) as unknown;
-    const markets = (Array.isArray(raw) ? raw : []) as Array<{ question?: string; slug?: string; volume?: number | string }>;
-    const items: ResearchItem[] = markets
-      .filter((m) => m.question && (terms.length === 0 || terms.some((t) => m.question!.toLowerCase().includes(t))))
-      .slice(0, 10)
-      .map((m) => ({
-        title: m.question!,
-        url: m.slug ? `https://polymarket.com/event/${m.slug}` : humanUrl,
-        score: Math.round(Number(m.volume ?? 0)),
-        author: "Polymarket",
-        source: "Polymarket",
-      }));
-    collect(ctx, items, { label: `Polymarket: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-polymarket: ${items.length} markets\n`);
-  } catch (err) {
-    collect(ctx, [], { label: `Polymarket: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-polymarket: failed (${(err as Error).message})\n`);
-  }
-  return 0;
+
+  return runFetcher(ctx, {
+    id: "polymarket",
+    name: "fetch-polymarket",
+    label: `Polymarket: ${topic}`,
+    humanUrl,
+    unit: "markets",
+    fetchItems: async () => {
+      const res = await fetch(
+        "https://gamma-api.polymarket.com/markets?closed=false&active=true&limit=120&order=volume&ascending=false",
+        { signal: AbortSignal.timeout(8000) },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const raw = (await res.json()) as unknown;
+      const markets = (Array.isArray(raw) ? raw : []) as Array<{ question?: string; slug?: string; volume?: number | string }>;
+      return markets
+        .filter((m) => m.question && (terms.length === 0 || terms.some((t) => m.question!.toLowerCase().includes(t))))
+        .slice(0, 10)
+        .map((m) => ({
+          title: m.question!,
+          url: m.slug ? `https://polymarket.com/event/${m.slug}` : humanUrl,
+          score: Math.round(Number(m.volume ?? 0)),
+          author: "Polymarket",
+          source: "Polymarket",
+        }));
+    },
+  });
 };
 
 // --- Web (keyless DuckDuckGo HTML search; fallback breadth) -----------------
 
 const fetchWeb: NativeHandler = async (ctx) => {
-  if (sourceDisabled("web")) return 0;
   const topic = String(ctx.params.topic ?? "").trim();
   if (!topic) return 0;
   const humanUrl = `https://duckduckgo.com/?q=${encodeURIComponent(topic)}`;
-  try {
-    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(topic)}`, {
-      headers: { "user-agent": "Mozilla/5.0 (agentic-os research)" },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const html = await res.text();
-    const items: ResearchItem[] = [];
-    const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
-    let m: RegExpExecArray | null;
-    let rank = 0;
-    while ((m = re.exec(html)) && items.length < 10) {
-      rank++;
-      let href = m[1]!;
-      const um = href.match(/[?&]uddg=([^&]+)/);
-      if (um) href = decodeURIComponent(um[1]!);
-      const title = m[2]!.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-      if (title && /^https?:/.test(href)) {
-        items.push({ title, url: href, score: Math.max(1, 11 - rank), author: "Web", source: "Web" });
+
+  return runFetcher(ctx, {
+    id: "web",
+    name: "fetch-web",
+    label: `Web search: ${topic}`,
+    humanUrl,
+    unit: "results",
+    fetchItems: async () => {
+      const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(topic)}`, {
+        headers: { "user-agent": "Mozilla/5.0 (agentic-os research)" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      const items: ResearchItem[] = [];
+      const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+      let m: RegExpExecArray | null;
+      let rank = 0;
+      while ((m = re.exec(html)) && items.length < 10) {
+        rank++;
+        let href = m[1]!;
+        const um = href.match(/[?&]uddg=([^&]+)/);
+        if (um) href = decodeURIComponent(um[1]!);
+        const title = m[2]!.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+        if (title && /^https?:/.test(href)) {
+          items.push({ title, url: href, score: Math.max(1, 11 - rank), author: "Web", source: "Web" });
+        }
       }
-    }
-    collect(ctx, items, { label: `Web search: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-web: ${items.length} results\n`);
-  } catch (err) {
-    collect(ctx, [], { label: `Web search: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-web: failed (${(err as Error).message})\n`);
-  }
-  return 0;
+      return items;
+    },
+  });
 };
 
 // --- YouTube (yt-dlp search; binary dependency, no key) ---------------------
 
 const fetchYouTube: NativeHandler = async (ctx) => {
-  if (sourceDisabled("youtube")) return 0;
   const topic = String(ctx.params.topic ?? "").trim();
   if (!topic) return 0;
   const humanUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(topic)}`;
-  try {
-    // --dump-json (not --print "%(...)") so no `%` reaches cmd.exe under shell:true.
-    const out = await runCapture(
-      "yt-dlp",
-      [`ytsearch8:${topic}`, "--flat-playlist", "--dump-json", "--skip-download", "--no-warnings"],
-      25000,
-    );
-    const items: ResearchItem[] = out
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((l) => {
-        try {
-          return JSON.parse(l) as { id?: string; title?: string; view_count?: number };
-        } catch {
-          return null;
-        }
-      })
-      .filter((r): r is { id?: string; title?: string; view_count?: number } => Boolean(r?.id))
-      .slice(0, 10)
-      .map((r) => ({
-        title: String(r.title ?? "(untitled)"),
-        url: `https://www.youtube.com/watch?v=${r.id}`,
-        score: Math.round(Number(r.view_count ?? 0)) || 1,
-        author: "YouTube",
-        source: "YouTube",
-      }));
 
-    // Transcript extraction: pull EN captions for the top few by views, strip to
-    // text, attach as excerpts (folded into synthesis). One call per video with a
-    // LITERAL -o base (no `%(...)s` template, which cmd.exe would mangle).
-    const top = items.slice().sort((a, b) => b.score - a.score).slice(0, 4);
-    if (top.length > 0) {
-      const dir = mkdtempSync(join(tmpdir(), "aos-yt-"));
-      try {
-        for (const it of top) {
-          const id = it.url.split("v=")[1];
-          if (!id) continue;
+  return runFetcher(ctx, {
+    id: "youtube",
+    name: "fetch-youtube",
+    label: `YouTube: ${topic}`,
+    humanUrl,
+    unit: "videos",
+    fetchItems: async () => {
+      // --dump-json (not --print "%(...)") so no `%` reaches cmd.exe under shell:true.
+      const out = await runCapture(
+        "yt-dlp",
+        [`ytsearch8:${topic}`, "--flat-playlist", "--dump-json", "--skip-download", "--no-warnings"],
+        25000,
+      );
+      const items: ResearchItem[] = out
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => {
           try {
-            await runCapture(
-              "yt-dlp",
-              [
-                "--skip-download", "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,en",
-                "--sub-format", "vtt", "--no-warnings", "-o", join(dir, id),
-                `https://www.youtube.com/watch?v=${id}`,
-              ],
-              30000,
-            );
+            return JSON.parse(l) as { id?: string; title?: string; view_count?: number };
           } catch {
-            /* this video's captions unavailable — skip it */
+            return null;
           }
-        }
-        let got = 0;
-        for (const f of readdirSync(dir)) {
-          if (!f.endsWith(".vtt")) continue;
-          const id = f.split(".")[0]!;
-          const text = stripVtt(readFileSync(join(dir, f), "utf8")).slice(0, 1500);
-          const item = items.find((it) => it.url.includes(id));
-          if (item && text && !item.excerpt) {
-            item.excerpt = text;
-            got++;
-          }
-        }
-        ctx.emit(`fetch-youtube: ${got} transcript(s) extracted\n`);
-      } catch (e) {
-        ctx.emit(`fetch-youtube: transcripts skipped (${(e as Error).message})\n`);
-      } finally {
+        })
+        .filter((r): r is { id?: string; title?: string; view_count?: number } => Boolean(r?.id))
+        .slice(0, 10)
+        .map((r) => ({
+          title: String(r.title ?? "(untitled)"),
+          url: `https://www.youtube.com/watch?v=${r.id}`,
+          score: Math.round(Number(r.view_count ?? 0)) || 1,
+          author: "YouTube",
+          source: "YouTube",
+        }));
+
+      // Transcript extraction: pull EN captions for the top few by views, strip to
+      // text, attach as excerpts (folded into synthesis). One call per video with a
+      // LITERAL -o base (no `%(...)s` template, which cmd.exe would mangle).
+      const top = items.slice().sort((a, b) => b.score - a.score).slice(0, 4);
+      if (top.length > 0) {
+        const dir = mkdtempSync(join(tmpdir(), "aos-yt-"));
         try {
-          rmSync(dir, { recursive: true, force: true });
-        } catch {
-          /* temp cleanup best-effort */
+          for (const it of top) {
+            const id = it.url.split("v=")[1];
+            if (!id) continue;
+            try {
+              await runCapture(
+                "yt-dlp",
+                [
+                  "--skip-download", "--write-auto-subs", "--write-subs", "--sub-langs", "en.*,en",
+                  "--sub-format", "vtt", "--no-warnings", "-o", join(dir, id),
+                  `https://www.youtube.com/watch?v=${id}`,
+                ],
+                30000,
+              );
+            } catch {
+              /* this video's captions unavailable — skip it */
+            }
+          }
+          let got = 0;
+          for (const f of readdirSync(dir)) {
+            if (!f.endsWith(".vtt")) continue;
+            const id = f.split(".")[0]!;
+            const text = stripVtt(readFileSync(join(dir, f), "utf8")).slice(0, 1500);
+            const item = items.find((it) => it.url.includes(id));
+            if (item && text && !item.excerpt) {
+              item.excerpt = text;
+              got++;
+            }
+          }
+          ctx.emit(`fetch-youtube: ${got} transcript(s) extracted\n`);
+        } catch (e) {
+          ctx.emit(`fetch-youtube: transcripts skipped (${(e as Error).message})\n`);
+        } finally {
+          try {
+            rmSync(dir, { recursive: true, force: true });
+          } catch {
+            /* temp cleanup best-effort */
+          }
         }
       }
-    }
 
-    collect(ctx, items, { label: `YouTube: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-youtube: ${items.length} videos\n`);
-  } catch (err) {
-    collect(ctx, [], { label: `YouTube: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-youtube: skipped (${(err as Error).message}); is yt-dlp installed?\n`);
-  }
-  return 0;
+      return items;
+    },
+  });
 };
 
 // --- X / Twitter (recent search; needs a bearer token) ----------------------
 
 const fetchX: NativeHandler = async (ctx) => {
-  if (sourceDisabled("x")) return 0;
   const topic = String(ctx.params.topic ?? "").trim();
   if (!topic) return 0;
   const token = config.x.bearerToken;
@@ -406,30 +382,32 @@ const fetchX: NativeHandler = async (ctx) => {
     return 0;
   }
   const humanUrl = `https://twitter.com/search?q=${encodeURIComponent(topic)}&f=live`;
-  try {
-    const q = encodeURIComponent(`${topic} -is:retweet lang:en`);
-    const res = await fetch(
-      `https://api.twitter.com/2/tweets/search/recent?query=${q}&max_results=20&tweet.fields=public_metrics`,
-      { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) },
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as {
-      data?: Array<{ id: string; text: string; public_metrics?: { like_count?: number; retweet_count?: number } }>;
-    };
-    const items: ResearchItem[] = (data.data ?? []).map((t) => ({
-      title: t.text.replace(/\s+/g, " ").slice(0, 140),
-      url: `https://twitter.com/i/web/status/${t.id}`,
-      score: (t.public_metrics?.like_count ?? 0) + (t.public_metrics?.retweet_count ?? 0),
-      author: "X",
-      source: "X",
-    }));
-    collect(ctx, items, { label: `X search: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-x: ${items.length} posts\n`);
-  } catch (err) {
-    collect(ctx, [], { label: `X search: ${topic}`, url: humanUrl });
-    ctx.emit(`fetch-x: failed (${(err as Error).message})\n`);
-  }
-  return 0;
+
+  return runFetcher(ctx, {
+    id: "x",
+    name: "fetch-x",
+    label: `X search: ${topic}`,
+    humanUrl,
+    unit: "posts",
+    fetchItems: async () => {
+      const q = encodeURIComponent(`${topic} -is:retweet lang:en`);
+      const res = await fetch(
+        `https://api.twitter.com/2/tweets/search/recent?query=${q}&max_results=20&tweet.fields=public_metrics`,
+        { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as {
+        data?: Array<{ id: string; text: string; public_metrics?: { like_count?: number; retweet_count?: number } }>;
+      };
+      return (data.data ?? []).map((t) => ({
+        title: t.text.replace(/\s+/g, " ").slice(0, 140),
+        url: `https://twitter.com/i/web/status/${t.id}`,
+        score: (t.public_metrics?.like_count ?? 0) + (t.public_metrics?.retweet_count ?? 0),
+        author: "X",
+        source: "X",
+      }));
+    },
+  });
 };
 
 // --- Synthesis (grounded, LLM) ---------------------------------------------
@@ -448,9 +426,7 @@ const synthesizeResearch: NativeHandler = async (ctx) => {
   }
 
   // Dedupe + rank, then number items so the model can cite them by [n].
-  const byUrl = new Map<string, ResearchItem>();
-  for (const it of items) if (!byUrl.has(it.url) || byUrl.get(it.url)!.score < it.score) byUrl.set(it.url, it);
-  const ranked = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 25);
+  const ranked = dedupeRank(items, 25);
   const corpus = ranked
     .map(
       (it, i) =>
@@ -504,9 +480,7 @@ const compileResearch: NativeHandler = async (ctx) => {
   const searchSources = (ctx.context.searchSources as SourceRef[] | undefined) ?? [];
 
   // Dedupe by url, strongest first.
-  const byUrl = new Map<string, ResearchItem>();
-  for (const it of all) if (!byUrl.has(it.url) || (byUrl.get(it.url)!.score < it.score)) byUrl.set(it.url, it);
-  const items = [...byUrl.values()].sort((a, b) => b.score - a.score);
+  const items = dedupeRank(all);
   const top = items.slice(0, 12);
 
   const sourcesUsed = [...new Set(items.map((i) => i.source))];
@@ -637,14 +611,15 @@ const aiWire: NativeHandler = async (ctx) => {
   const topic = String(ctx.params.topic ?? "").trim() || AI_WIRE_TOPIC;
   ctx.params.topic = topic; // the fetch handlers read params.topic
 
-  // Reuse the keyless fetchers to populate ctx.context.researchItems.
+  // Reuse the keyless fetchers to populate ctx.context.researchItems. HN/Reddit
+  // are ai-wire's data source by design, so the research toggles don't apply.
+  ctx.context.bypassSourceToggles = true;
   await fetchHackerNews(ctx);
   await fetchReddit(ctx);
+  delete ctx.context.bypassSourceToggles;
 
   const items = (ctx.context.researchItems as ResearchItem[] | undefined) ?? [];
-  const byUrl = new Map<string, ResearchItem>();
-  for (const it of items) if (!byUrl.has(it.url) || byUrl.get(it.url)!.score < it.score) byUrl.set(it.url, it);
-  const ranked = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 25);
+  const ranked = dedupeRank(items, 25);
 
   // Synthesize concise wire headlines (grounded in the items) when an LLM is up.
   let wire = "";

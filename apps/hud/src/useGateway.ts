@@ -234,6 +234,8 @@ export function useGateway(): HudState {
         break;
       case "speech":
         setLastSpeech({ text: e.text, at: Date.now() });
+        // One element per event so a second announcement doesn't cut off the
+        // first mid-sentence (they overlap rather than truncate).
         if (e.audioUrl) void new Audio(e.audioUrl).play().catch(() => {});
         break;
       case "auth.prompt":

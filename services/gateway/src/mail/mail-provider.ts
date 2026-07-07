@@ -18,6 +18,7 @@ import {
   type DeviceCodePrompt,
   type GraphTokenProvider,
 } from "./graph-auth.js";
+import { createSecretTokenStore } from "./secret-token-store.js";
 
 export interface MailMessage {
   id: string;
@@ -158,7 +159,9 @@ function buildTokenProvider(mailConfig: typeof config.mail, hooks: MailHooks): G
         clientId: mailConfig.clientId,
         tenant: mailConfig.tenant,
         scopes: mailConfig.scopes,
-        store: new FileTokenStore(mailConfig.tokenStorePath),
+        // Keychain/encrypted-backed store; the legacy plaintext file is migrated
+        // in on first read and then deleted.
+        store: createSecretTokenStore(mailConfig.tokenStorePath, new FileTokenStore(mailConfig.tokenStorePath)),
         onPrompt: hooks.onPrompt ?? consolePrompt,
         onResolved: hooks.onResolved,
       });

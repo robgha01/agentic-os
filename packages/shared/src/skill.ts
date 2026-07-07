@@ -24,12 +24,16 @@ export const SkillExecutionSchema = z.discriminatedUnion("kind", [
     promptTemplate: z.string().min(1),
     /** Extra CLI args appended to the `claude -p` invocation. */
     args: z.array(z.string()).default([]),
+    /** Kill the child if it exceeds this (ms). Default lives in skill-runtime. */
+    timeoutMs: z.number().int().positive().optional(),
   }),
   /** Arbitrary local process (scrapers, pipelines). */
   z.object({
     kind: z.literal("process"),
     command: z.string().min(1),
     args: z.array(z.string()).default([]),
+    /** Kill the child if it exceeds this (ms). Default lives in skill-runtime. */
+    timeoutMs: z.number().int().positive().optional(),
   }),
   /** In-gateway TypeScript handler resolved by id. */
   z.object({

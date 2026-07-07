@@ -38,11 +38,6 @@ export class Scheduler {
     return opId;
   }
 
-  /** Counts for diagnostics/health. */
-  stats(): { running: number; queued: number; limit: number } {
-    return { running: this.running.size, queued: this.queue.length, limit: this.limit() };
-  }
-
   /** Start tasks while a slot is free. A task frees its slot when it settles. */
   private pump(): void {
     while (this.running.size < Math.max(1, this.limit()) && this.queue.length > 0) {

@@ -6,6 +6,7 @@
  * (e.g. a typed/spoken request to route). Shared here so the HUD (Phase 4) and
  * the gateway speak exactly the same types.
  */
+import { z } from "zod";
 import type { RoutedIntent } from "./actions.js";
 import type { ModelSelection } from "./models.js";
 
@@ -71,3 +72,70 @@ export type ClientCommand =
   /** Speak a vault record aloud — the OS reads its spoken core (TL;DR blockquote). */
   | { type: "speak"; path: string }
   | { type: "ping" };
+
+// --- Runtime validation (the wire is untrusted on both ends) -----------------
+
+// `source` (ROUTE_SOURCES) and `provider` (PROVIDER_IDS) are the canonical sets,
+// but on the wire they stay permissive strings so a HUD bundle keeps rendering
+// events from a newer gateway that added a route source or provider id — the HUD
+// treats them as display/provenance strings only, never branching on them.
+const RoutedIntentSchema = z.object({
+  actionId: z.string(),
+  source: z.string(),
+  confidence: z.number(),
+  parameters: z.record(z.unknown()),
+  rawInput: z.string(),
+  reasoning: z.string().optional(),
+}) as unknown as z.ZodType<RoutedIntent>;
+
+const ModelSelectionSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  reason: z.string(),
+}) as unknown as z.ZodType<ModelSelection>;
+
+const OperationResultSchema: z.ZodType<OperationResult> = z.object({
+  path: z.string(),
+  title: z.string(),
+  type: z.string(),
+});
+
+const OperationDescriptorSchema: z.ZodType<OperationDescriptor> = z.object({
+  opId: z.string(),
+  actionId: z.string(),
+  skillId: z.string().nullable(),
+  selection: ModelSelectionSchema.nullable(),
+});
+
+export const OsEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("routing.resolved"), at: z.string(), intent: RoutedIntentSchema }),
+  z.object({ type: z.literal("operation.queued"), at: z.string(), opId: z.string(), label: z.string(), kind: z.enum(["route", "invoke"]) }),
+  z.object({ type: z.literal("operation.started"), at: z.string(), op: OperationDescriptorSchema }),
+  z.object({ type: z.literal("operation.output"), at: z.string(), opId: z.string(), stream: z.enum(["stdout", "stderr"]), chunk: z.string() }),
+  z.object({ type: z.literal("operation.completed"), at: z.string(), opId: z.string(), exitCode: z.number().nullable(), result: OperationResultSchema.optional() }),
+  z.object({ type: z.literal("operation.failed"), at: z.string(), opId: z.string(), error: z.string() }),
+  z.object({ type: z.literal("notification"), at: z.string(), level: z.enum(["info", "warn", "error"]), message: z.string(), speak: z.boolean().optional() }),
+  z.object({ type: z.literal("metric"), at: z.string(), name: z.string(), value: z.number() }),
+  z.object({ type: z.literal("speech"), at: z.string(), text: z.string(), mode: z.enum(["text", "voice"]), audioUrl: z.string().optional(), provider: z.string().optional() }),
+  z.object({ type: z.literal("auth.prompt"), at: z.string(), service: z.string(), verificationUri: z.string(), userCode: z.string(), message: z.string(), expiresAt: z.string() }),
+  z.object({ type: z.literal("auth.resolved"), at: z.string(), service: z.string(), ok: z.boolean() }),
+]) as unknown as z.ZodType<OsEvent>;
+
+export const ClientCommandSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("route"), input: z.string().min(1) }),
+  z.object({ type: z.literal("invoke"), skillId: z.string().min(1), params: z.record(z.unknown()).optional() }),
+  z.object({ type: z.literal("speak"), path: z.string().min(1) }),
+  z.object({ type: z.literal("ping") }),
+]) as unknown as z.ZodType<ClientCommand>;
+
+/** Validate an inbound event frame; null when it isn't a well-formed OsEvent. */
+export function parseOsEvent(input: unknown): OsEvent | null {
+  const r = OsEventSchema.safeParse(input);
+  return r.success ? r.data : null;
+}
+
+/** Validate an inbound client command; null when it isn't well formed. */
+export function parseClientCommand(input: unknown): ClientCommand | null {
+  const r = ClientCommandSchema.safeParse(input);
+  return r.success ? r.data : null;
+}

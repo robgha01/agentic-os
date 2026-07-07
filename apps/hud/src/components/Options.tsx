@@ -17,6 +17,35 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+// Module-scope controls: defining these inside Options would create a NEW
+// component type per render, remounting the input (and dropping focus) on
+// every keystroke.
+function Select({ label, value, options, onChange }: {
+  label: string; value: string; options: string[]; onChange: (v: string) => void;
+}) {
+  return (
+    <div className="opt__row">
+      <span className="opt__key">{label}</span>
+      <select className="opt__select" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function Text({ label, value, placeholder, onChange }: {
+  label: string; value: string; placeholder?: string; onChange: (v: string) => void;
+}) {
+  return (
+    <div className="opt__row">
+      <span className="opt__key">{label}</span>
+      <input className="opt__select" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
 export function Options({ hud }: { hud: HudState }) {
   const [cfg, setCfg] = useState<ConfigView | null>(null);
   const [error, setError] = useState(false);
@@ -47,32 +76,11 @@ export function Options({ hud }: { hud: HudState }) {
     void hud.saveSettings({ [key]: value });
   };
 
-  function Select({ label, k, running, options }: { label: string; k: string; running: string; options: string[] }) {
-    return (
-      <div className="opt__row">
-        <span className="opt__key">{label}</span>
-        <select className="opt__select" value={valueOf(k, running)} onChange={(e) => change(k, e.target.value)}>
-          {options.map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
-        </select>
-      </div>
-    );
-  }
-
-  function Text({ label, k, running, placeholder }: { label: string; k: string; running: string; placeholder?: string }) {
-    return (
-      <div className="opt__row">
-        <span className="opt__key">{label}</span>
-        <input
-          className="opt__select"
-          value={valueOf(k, running)}
-          placeholder={placeholder}
-          onChange={(e) => change(k, e.target.value)}
-        />
-      </div>
-    );
-  }
+  // Bind a config key to the hoisted controls: effective value + change handler.
+  const bind = (k: string, running: string) => ({
+    value: valueOf(k, running),
+    onChange: (v: string) => change(k, v),
+  });
 
   // Disabled-provider set (edited overlay > saved > running), and its toggle.
   const disabledSet = new Set(
@@ -114,8 +122,8 @@ export function Options({ hud }: { hud: HudState }) {
 
       <section className="opt">
         <h2 className="opt__h">Routing</h2>
-        <Select label="Router brain" k="router.defaultProvider" running={cfg.router.defaultProvider} options={["haiku", "ollama", "openai"]} />
-        <Select label="Claude transport" k="router.transport" running={cfg.router.transport} options={["sdk", "headless"]} />
+        <Select label="Router brain" {...bind("router.defaultProvider", cfg.router.defaultProvider)} options={["haiku", "ollama", "openai"]} />
+        <Select label="Claude transport" {...bind("router.transport", cfg.router.transport)} options={["sdk", "headless"]} />
         <p className="opt__hint">
           The brain orchestrates fast routing only — it never runs skill work, and
           skills can't change it. <code>sdk</code> uses the Anthropic API (needs a key);
@@ -152,12 +160,12 @@ export function Options({ hud }: { hud: HudState }) {
             </div>
           );
         })}
-        <Text label="Fallback order" k="models.fallbackOrder" running={cfg.models.fallbackOrder.join(",")} placeholder="claude-code,openai,ollama,haiku" />
-        <Text label="Max concurrent tasks" k="tasks.maxConcurrent" running={String(cfg.tasks.maxConcurrent)} placeholder="2" />
-        <Text label="OpenAI base URL" k="openai.baseUrl" running={cfg.openai.baseUrl} placeholder="https://api.openai.com/v1" />
-        <Text label="OpenAI model" k="openai.model" running={cfg.openai.model} placeholder="gpt-4o-mini" />
-        <Text label="Ollama base URL" k="ollama.baseUrl" running={cfg.ollama.baseUrl} placeholder="http://localhost:11434" />
-        <Text label="Ollama model" k="ollama.model" running={cfg.ollama.model} placeholder="llama3:8b" />
+        <Text label="Fallback order" {...bind("models.fallbackOrder", cfg.models.fallbackOrder.join(","))} placeholder="claude-code,openai,ollama,haiku" />
+        <Text label="Max concurrent tasks" {...bind("tasks.maxConcurrent", String(cfg.tasks.maxConcurrent))} placeholder="2" />
+        <Text label="OpenAI base URL" {...bind("openai.baseUrl", cfg.openai.baseUrl)} placeholder="https://api.openai.com/v1" />
+        <Text label="OpenAI model" {...bind("openai.model", cfg.openai.model)} placeholder="gpt-4o-mini" />
+        <Text label="Ollama base URL" {...bind("ollama.baseUrl", cfg.ollama.baseUrl)} placeholder="http://localhost:11434" />
+        <Text label="Ollama model" {...bind("ollama.model", cfg.ollama.model)} placeholder="llama3:8b" />
         <p className="opt__hint">
           The OpenAI provider speaks any OpenAI-compatible endpoint — local (LM Studio,
           vLLM, llama.cpp) or remote (OpenRouter, Together, Groq, OpenAI). Set its key
@@ -167,8 +175,8 @@ export function Options({ hud }: { hud: HudState }) {
 
       <section className="opt">
         <h2 className="opt__h">Application window</h2>
-        <Select label="Open on launch" k="ui.launch" running={cfg.ui.launch} options={["app", "browser", "none"]} />
-        <Text label="Browser" k="ui.browser" running={cfg.ui.browser} placeholder="auto | chrome | edge | brave | firefox | path" />
+        <Select label="Open on launch" {...bind("ui.launch", cfg.ui.launch)} options={["app", "browser", "none"]} />
+        <Text label="Browser" {...bind("ui.browser", cfg.ui.browser)} placeholder="auto | chrome | edge | brave | firefox | path" />
         <p className="opt__hint">
           <code>app</code> opens a chromeless Chromium window (Chrome/Edge/Brave); <code>browser</code> opens your
           default browser (any engine); <code>none</code> just serves the HUD at the local URL. Applies to the
@@ -177,10 +185,38 @@ export function Options({ hud }: { hud: HudState }) {
       </section>
 
       <section className="opt">
+        <h2 className="opt__h">Network access</h2>
+        {(() => {
+          const on = valueOf("security.allowRemoteAccess", String(cfg.security.allowRemoteAccess)) === "true";
+          return (
+            <div className="opt__row">
+              <span className="opt__key">
+                Allow remote access
+                <span className="opt__sub">reach the HUD from other devices / the machine name</span>
+              </span>
+              <button
+                className={`opt__toggle ${on ? "opt__toggle--on" : ""}`}
+                role="switch"
+                aria-checked={on}
+                onClick={() => change("security.allowRemoteAccess", String(!on))}
+              >
+                <span className="opt__toggleknob" /> {on ? "on" : "off"}
+              </button>
+            </div>
+          );
+        })()}
+        <p className="opt__hint">
+          Off by default: the gateway serves <code>localhost</code> only and blocks cross-site
+          requests (DNS-rebinding + CSRF defense). Turn on to reach it over your LAN —
+          only on a network you trust. Applies live.
+        </p>
+      </section>
+
+      <section className="opt">
         <h2 className="opt__h">Voice</h2>
-        <Select label="Mode" k="voice.mode" running={cfg.voice.mode} options={["text", "voice"]} />
-        <Select label="TTS engine" k="voice.tts.provider" running={cfg.voice.tts} options={["kokoro", "openai", "elevenlabs"]} />
-        <Select label="STT engine" k="voice.stt.provider" running={cfg.voice.stt} options={["faster-whisper", "openai"]} />
+        <Select label="Mode" {...bind("voice.mode", cfg.voice.mode)} options={["text", "voice"]} />
+        <Select label="TTS engine" {...bind("voice.tts.provider", cfg.voice.tts)} options={["kokoro", "openai", "elevenlabs"]} />
+        <Select label="STT engine" {...bind("voice.stt.provider", cfg.voice.stt)} options={["faster-whisper", "openai"]} />
         <p className="opt__hint">
           <code>voice</code> mode uses the Python sidecar; cloud engines need their key set in the environment.
         </p>
@@ -188,8 +224,8 @@ export function Options({ hud }: { hud: HudState }) {
 
       <section className="opt">
         <h2 className="opt__h">Mail (inbox triage)</h2>
-        <Select label="Provider" k="mail.provider" running={cfg.mail.provider} options={["none", "outlook", "gmail", "imap"]} />
-        <Select label="Token source" k="mail.tokenSource" running={cfg.mail.tokenSource} options={["device-code", "command", "env"]} />
+        <Select label="Provider" {...bind("mail.provider", cfg.mail.provider)} options={["none", "outlook", "gmail", "imap"]} />
+        <Select label="Token source" {...bind("mail.tokenSource", cfg.mail.tokenSource)} options={["device-code", "command", "env"]} />
         <Row label="Outlook" value={cfg.mail.signedIn ? "signed in ✓" : "not connected"} />
         {cfg.mail.provider === "outlook" ? (
           <button className="opt__btn" onClick={() => hud.send({ type: "invoke", skillId: "inbox-triage" })}>

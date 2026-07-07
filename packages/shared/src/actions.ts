@@ -7,8 +7,12 @@
  * the gateway's dispatch layer hands to the skill runtime.
  */
 
-/** Which path produced an intent. `direct` = a command-deck button / invoke (no routing). */
-export type RouteSource = "regex" | "semantic" | "direct";
+/**
+ * Which path produced an intent. `direct` = a command-deck button / invoke (no
+ * routing). Single source of truth — imported wherever the set is needed.
+ */
+export const ROUTE_SOURCES = ["regex", "semantic", "direct"] as const;
+export type RouteSource = (typeof ROUTE_SOURCES)[number];
 
 /** A single parameter an action can accept, surfaced to the semantic router. */
 export interface ActionParameter {

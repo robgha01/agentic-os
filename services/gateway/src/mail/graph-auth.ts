@@ -62,13 +62,19 @@ export class CommandTokenProvider implements GraphTokenProvider {
 
 // --- Device code (no app registration) -------------------------------------
 
-interface TokenStoreData {
+export interface TokenStoreData {
   refreshToken: string;
   clientId: string;
   tenant: string;
 }
 
-export class FileTokenStore {
+/** Where the long-lived refresh token lives (file = legacy, secret store = current). */
+export interface TokenStore {
+  load(): TokenStoreData | null;
+  save(data: TokenStoreData): void;
+}
+
+export class FileTokenStore implements TokenStore {
   constructor(private readonly path: string) {}
 
   load(): TokenStoreData | null {
@@ -112,7 +118,7 @@ export interface DeviceCodeOptions {
   clientId: string;
   tenant: string;
   scopes: string;
-  store: FileTokenStore;
+  store: TokenStore;
   onPrompt: (p: DeviceCodePrompt) => void;
   onResolved?: (ok: boolean) => void;
   // Test seams (default to real implementations):

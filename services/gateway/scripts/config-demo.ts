@@ -55,7 +55,7 @@ async function main(): Promise<void> {
       const { Entry } = req("@napi-rs/keyring") as {
         Entry: new (s: string, a: string) => { deletePassword(): boolean };
       };
-      for (const k of ["anthropic.apiKey", "mail.token", "reddit.clientSecret", "__probe__"]) {
+      for (const k of ["anthropic.apiKey", "mail.token", "mail.refreshToken", "__probe__"]) {
         try {
           new Entry(svc, k).deletePassword();
         } catch {

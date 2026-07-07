@@ -9,8 +9,8 @@
  * `--model` flag accepts the same ids (e.g. claude-haiku-4-5), so this works
  * for Haiku and anything else `claude -p` supports.
  */
-import { spawn } from "node:child_process";
 import type { Action, ProviderId } from "@aos/shared";
+import { runProcess } from "../../../util/run-process.js";
 import type { RouterDecision, RouterProvider } from "../provider.types.js";
 import { JSON_RESPONSE_INSTRUCTION, buildRouterSystemPrompt } from "../prompt.js";
 
@@ -82,42 +82,20 @@ export class ClaudeHeadlessProvider implements RouterProvider {
   }
 
   /** Spawn `claude -p --output-format json --model <model>`, prompt via stdin. */
-  private runClaude(prompt: string): Promise<ClaudeCliResult> {
-    return new Promise((resolve, reject) => {
-      const child = spawn(
-        this.bin,
-        ["-p", "--output-format", "json", "--model", this.model],
-        { stdio: ["pipe", "pipe", "pipe"], shell: true }, // shell:true resolves claude.cmd on Windows
-      );
-
-      let stdout = "";
-      let stderr = "";
-      const timer = setTimeout(() => {
-        child.kill("SIGKILL");
-        reject(new Error(`claude-headless: timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
-
-      child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
-      child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        reject(new Error(`claude-headless: failed to spawn "${this.bin}": ${err.message}`));
-      });
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        if (code !== 0) {
-          reject(new Error(`claude-headless: exited ${code}: ${stderr.trim()}`));
-          return;
-        }
-        try {
-          resolve(JSON.parse(stdout) as ClaudeCliResult);
-        } catch {
-          reject(new Error("claude-headless: could not parse CLI JSON envelope"));
-        }
-      });
-
-      child.stdin.write(prompt);
-      child.stdin.end();
+  private async runClaude(prompt: string): Promise<ClaudeCliResult> {
+    // shell:true resolves claude.cmd on Windows.
+    const r = await runProcess(this.bin, ["-p", "--output-format", "json", "--model", this.model], {
+      stdin: prompt,
+      shell: true,
+      timeoutMs: this.timeoutMs,
     });
+    if (r.spawnError) throw new Error(`claude-headless: failed to spawn "${this.bin}": ${r.spawnError}`);
+    if (r.timedOut) throw new Error(`claude-headless: timed out after ${this.timeoutMs}ms`);
+    if (r.code !== 0) throw new Error(`claude-headless: exited ${r.code}: ${r.stderr.trim()}`);
+    try {
+      return JSON.parse(r.stdout) as ClaudeCliResult;
+    } catch {
+      throw new Error("claude-headless: could not parse CLI JSON envelope");
+    }
   }
 }

@@ -25,7 +25,7 @@ declarative manifest validated at load time (`packages/shared/src/skill.ts`).
     ]
   },
   "modelPolicy": { "execTier": "heavy", "privacy": "cloud-ok" },
-  "execution": { "kind": "composite", "steps": ["fetch-hackernews", "fetch-reddit", "synthesize-research", "compile-research"] },
+  "execution": { "kind": "composite", "steps": ["fetch-hackernews", "fetch-reddit", "fetch-polymarket", "fetch-web", "fetch-youtube", "fetch-x", "synthesize-research", "compile-research"] },
   "vaultOutput": "10-research/{{topic}}.md",
   "staleAfterMinutes": 1440,
   "produces": { "type": "research", "keyParam": "topic" }
@@ -88,10 +88,14 @@ contract — see [vault.md](vault.md)) and write via `vault.writeGenerated`.
 
 | Skill | Surface | Execution |
 |---|---|---|
-| `last-30-days` (Deep Research) | deck, nl | composite: HN + Reddit fetch → synthesize → compile |
+| `last-30-days` (Deep Research) | deck, nl | composite: 6 fetchers (HN, Reddit, Polymarket, Web, YouTube, X) → synthesize → compile |
+| `ai-wire` | deck, nl | native — themed AI-industry intel brief (`intel` record) |
+| `morning-report` (trigger `rundown`) | deck, nl | native — daily brief from vault + calendar (`report` record) |
+| `schedule` | deck, nl | native — today's Outlook agenda (`schedule` record) |
 | `inbox-triage` | deck, nl | native (Outlook/Graph via device-code) |
-| `ship-ticket` | deck | the preserved Shape A ticket flow |
-| `fetch-hackernews` / `fetch-reddit` / `synthesize-research` / `compile-research` | `[]` | internal sub-skills |
+| `ship-ticket` | deck, nl | claude-headless — the preserved Shape A ticket flow |
+| `fetch-hackernews` / `fetch-reddit` / `fetch-polymarket` / `fetch-web` / `fetch-youtube` / `fetch-x` | `[]` | internal sub-skills (research sources) |
+| `synthesize-research` / `compile-research` | `[]` | internal sub-skills (grounded synthesis → vault record) |
 
 ## Adding a skill
 

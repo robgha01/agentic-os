@@ -30,11 +30,6 @@ const distDir = (): string =>
 
 const hasEmbedded = Object.keys(HUD_ASSETS).length > 0;
 
-/** True if any HUD is available to serve (embedded or on disk). */
-export function hudAvailable(): boolean {
-  return hasEmbedded || existsSync(join(distDir(), "index.html"));
-}
-
 /** Resolve a request path to {type, body}; null if not found. Falls back to index.html for SPA routes. */
 function lookup(pathname: string): { type: string; body: Buffer } | null {
   let p = pathname === "/" ? "/index.html" : pathname;

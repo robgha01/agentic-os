@@ -48,6 +48,7 @@ export const EDITABLE_KEYS = [
   "models.fallbackOrder",
   "models.disabled",
   "tasks.maxConcurrent",
+  "security.allowRemoteAccess",
   "research.disabled",
   "ui.launch",
   "ui.browser",
@@ -55,7 +56,7 @@ export const EDITABLE_KEYS = [
 export type EditableKey = (typeof EDITABLE_KEYS)[number];
 
 /** Secret keys — kept in the OS keychain or encrypted; never returned by value. */
-export const SECRET_KEYS = ["anthropic.apiKey", "openai.apiKey", "mail.token", "reddit.clientSecret", "x.bearerToken"] as const;
+export const SECRET_KEYS = ["anthropic.apiKey", "openai.apiKey", "mail.token", "mail.refreshToken", "x.bearerToken"] as const;
 export type SecretKey = (typeof SECRET_KEYS)[number];
 const SECRET_SET: ReadonlySet<string> = new Set(SECRET_KEYS);
 
@@ -85,6 +86,8 @@ interface SecretBackend {
 
 /** OS keychain via @napi-rs/keyring (optional dependency). undefined if absent/unusable. */
 function tryKeychainBackend(): SecretBackend | undefined {
+  // Explicit off-switch (tests, headless boxes where a probe would hang).
+  if (process.env.AGENTIC_OS_NO_KEYCHAIN) return undefined;
   try {
     const require = createRequire(import.meta.url);
     const { Entry } = require("@napi-rs/keyring") as {
@@ -200,11 +203,14 @@ export function getValue(key: string): string | undefined {
 export function setValues(partial: Record<string, unknown>): void {
   let touchedFile = false;
   for (const [k, v] of Object.entries(partial)) {
-    if (typeof v !== "string") continue;
+    // Accept the scalar types the Options panel produces; store as strings
+    // (agentic-os.config.ts parses them back). Drop anything structured.
+    if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") continue;
+    const value = String(v);
     if (SECRET_SET.has(k)) {
-      secrets.set(k, v);
+      secrets.set(k, value);
     } else {
-      cache[k] = v;
+      cache[k] = value;
       touchedFile = true;
     }
   }
