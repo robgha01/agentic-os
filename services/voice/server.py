@@ -65,7 +65,9 @@ def health() -> dict:
 @app.post("/stt")
 async def transcribe(audio: UploadFile) -> dict:
     os.makedirs(cfg.audio_dir, exist_ok=True)
-    tmp = os.path.join(cfg.audio_dir, f"in_{audio.filename or 'clip'}")
+    # basename() the client-supplied filename — same guard as GET /audio below.
+    safe_name = os.path.basename(audio.filename or "clip")
+    tmp = os.path.join(cfg.audio_dir, f"in_{safe_name}")
     with open(tmp, "wb") as fh:
         fh.write(await audio.read())
     try:
