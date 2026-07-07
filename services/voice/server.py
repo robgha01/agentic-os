@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import config
+import installer
 import stt as stt_mod
 import tts as tts_mod
 
@@ -51,6 +52,10 @@ def get_tts() -> tts_mod.TtsProvider:
 class TtsRequest(BaseModel):
     text: str
     voice: str | None = None
+
+
+class InstallRequest(BaseModel):
+    provider: str | None = None
 
 
 @app.get("/health")
@@ -90,6 +95,26 @@ def synthesize(req: TtsRequest) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     name = os.path.basename(path)
     return {"audioUrl": f"http://{cfg.host}:{cfg.port}/audio/{name}"}
+
+
+@app.get("/tts/status")
+def tts_status(provider: str | None = None) -> dict:
+    which = provider or cfg.tts.provider
+    if which == "kokoro-onnx":
+        return installer.kokoro_onnx_status(cfg.tts)
+    return {"provider": which, "installable": False, "ready": True, "missing": []}
+
+
+@app.post("/tts/install")
+def tts_install(req: InstallRequest) -> dict:
+    if (req.provider or "kokoro-onnx") != "kokoro-onnx":
+        raise HTTPException(status_code=400, detail="only kokoro-onnx is installable")
+    log: list[str] = []
+    try:
+        status = installer.install_kokoro_onnx(cfg.tts, log.append)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"install failed: {exc}") from exc
+    return {"ok": status["ready"], **status, "log": log}
 
 
 @app.get("/audio/{name}")
