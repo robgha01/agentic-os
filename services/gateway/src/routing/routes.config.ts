@@ -57,10 +57,15 @@ export const ROUTES: readonly RouteRule[] = [
   },
   {
     id: "last-30-days",
-    pattern: /\b(last 30 days|deep[\s-]?research)\b/i,
+    // Capture the topic after the trigger (optionally past an "on/about/of/…"
+    // connector) into `topic`, which is what the skill's fetchers need. Requires
+    // a topic to fire: a bare "last 30 days" won't match and falls through to the
+    // semantic router (which can ask), instead of running every source empty.
+    pattern:
+      /\b(?:last 30 days|deep[\s-]?research)(?:\s+(?:on|about|of|for|regarding|into))?\s+(?<topic>\S.*?)\s*$/i,
     action: "last-30-days",
     priority: 80,
-    examples: ["last 30 days on rust async", "deep research electric vehicles"],
+    examples: ["last 30 days on rust async", "deep research electric vehicles", "last 30 days of sport"],
   },
   {
     id: "ship-ticket",

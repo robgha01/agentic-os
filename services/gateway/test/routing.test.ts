@@ -33,6 +33,24 @@ describe("Router.matchRegex", () => {
     expect(router.matchRegex("ship it")).toBeNull();
   });
 
+  it("captures the research topic (past an optional connector) into parameters", () => {
+    expect(router.matchRegex("last 30 days on sport")).toMatchObject({
+      actionId: "last-30-days",
+      parameters: { topic: "sport" },
+    });
+    expect(router.matchRegex("last 30 days of sport")?.parameters).toEqual({ topic: "sport" });
+    expect(router.matchRegex("deep research electric vehicles")?.parameters).toEqual({
+      topic: "electric vehicles",
+    });
+    // a connector-shaped word that's actually part of the topic isn't eaten
+    expect(router.matchRegex("last 30 days onboarding")?.parameters).toEqual({ topic: "onboarding" });
+  });
+
+  it("does not deterministically run research without a topic", () => {
+    expect(router.matchRegex("last 30 days")).toBeNull();
+    expect(router.matchRegex("deep research")).toBeNull();
+  });
+
   it("returns null when nothing matches", () => {
     expect(router.matchRegex("what's the weather on mars")).toBeNull();
   });
