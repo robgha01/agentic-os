@@ -79,7 +79,9 @@ async function main(): Promise<void> {
     if (config.voice.mode !== "voice" || !config.voice.announce) return;
     const doc = vault.readByPath(e.result.path);
     const core = doc ? extractSpokenCore(doc.body) : "";
-    void speaker.say(core || `${e.result.title} ready.`);
+    // Announcement: spoken only if the HUD's voice is free, else it becomes an
+    // unheard card — pass the path so the HUD can mark the right one.
+    void speaker.say(core || `${e.result.title} ready.`, { path: e.result.path });
   });
   const dispatcher = new Dispatcher(router, loader, bus, runtime, vault, new SkillRuntime(bus, loader, buildServices()));
 
@@ -108,7 +110,7 @@ async function main(): Promise<void> {
     vault,
     config.ports.gateway,
     applyConfig,
-    (text) => void speaker.say(text),
+    (text) => void speaker.say(text, { onDemand: true }), // the "Speak this record" button — play now, don't queue
     () => providerReadiness(runtime),
     scheduler,
   );

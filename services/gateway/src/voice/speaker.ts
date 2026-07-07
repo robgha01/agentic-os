@@ -24,7 +24,12 @@ export class Speaker {
     this.tts = tts;
   }
 
-  async say(text: string): Promise<void> {
+  /**
+   * `onDemand` marks user-initiated playback (the Speak button) so the HUD
+   * plays it immediately; `path` names the source record so the HUD can mark
+   * its card unheard when it skips an announcement (voice already busy).
+   */
+  async say(text: string, opts: { onDemand?: boolean; path?: string } = {}): Promise<void> {
     if (this.mode === "voice") {
       try {
         if (await this.tts.available()) {
@@ -37,6 +42,8 @@ export class Speaker {
               mode: "voice",
               audioUrl: synth.audioUrl,
               provider: synth.provider,
+              onDemand: opts.onDemand,
+              path: opts.path,
             });
             return;
           }
@@ -46,7 +53,7 @@ export class Speaker {
       }
     }
     // text mode, or voice unavailable -> graceful text fallback
-    this.bus.emit({ type: "speech", at: now(), text, mode: "text" });
+    this.bus.emit({ type: "speech", at: now(), text, mode: "text", onDemand: opts.onDemand, path: opts.path });
   }
 }
 

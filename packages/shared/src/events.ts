@@ -52,8 +52,15 @@ export type OsEvent =
    * spoken-as-text content); in voice mode `audioUrl` points to synthesized
    * audio the HUD plays. `mode` reflects what was actually produced — a voice
    * request that falls back to text reports `mode: "text"`.
+   *
+   * `onDemand` marks user-initiated playback (the "Speak this record" button):
+   * it plays immediately, interrupting anything. Absent/false = an OS
+   * announcement (result auto-announce, spoken notification), which the HUD
+   * speaks only if the voice is free — otherwise it surfaces as an unheard
+   * card. `path` is the source vault record (announcements only), so the HUD
+   * can mark the matching card unheard when it skips speaking it.
    */
-  | { type: "speech"; at: string; text: string; mode: "text" | "voice"; audioUrl?: string; provider?: string }
+  | { type: "speech"; at: string; text: string; mode: "text" | "voice"; audioUrl?: string; provider?: string; onDemand?: boolean; path?: string }
   /**
    * A sign-in is needed (e.g. Outlook device-code). The HUD renders this as a
    * "finish login" prompt — open `verificationUri` and enter `userCode`.
@@ -116,7 +123,7 @@ export const OsEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("operation.failed"), at: z.string(), opId: z.string(), error: z.string() }),
   z.object({ type: z.literal("notification"), at: z.string(), level: z.enum(["info", "warn", "error"]), message: z.string(), speak: z.boolean().optional() }),
   z.object({ type: z.literal("metric"), at: z.string(), name: z.string(), value: z.number() }),
-  z.object({ type: z.literal("speech"), at: z.string(), text: z.string(), mode: z.enum(["text", "voice"]), audioUrl: z.string().optional(), provider: z.string().optional() }),
+  z.object({ type: z.literal("speech"), at: z.string(), text: z.string(), mode: z.enum(["text", "voice"]), audioUrl: z.string().optional(), provider: z.string().optional(), onDemand: z.boolean().optional(), path: z.string().optional() }),
   z.object({ type: z.literal("auth.prompt"), at: z.string(), service: z.string(), verificationUri: z.string(), userCode: z.string(), message: z.string(), expiresAt: z.string() }),
   z.object({ type: z.literal("auth.resolved"), at: z.string(), service: z.string(), ok: z.boolean() }),
 ]) as unknown as z.ZodType<OsEvent>;

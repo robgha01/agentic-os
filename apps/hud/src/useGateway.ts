@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand, OsEvent, SkillCard } from "@aos/shared";
-import { onSpeakingChange, speak, stopSpeaking } from "./audio-player.js";
+import { announceIfIdle, onSpeakingChange, speakNow, stopSpeaking } from "./audio-player.js";
 import {
   GatewayClient,
   type ConfigView,
@@ -52,6 +52,8 @@ export interface AuthPromptView {
 /**
  * A finished operation, surfaced as a notification card orbiting the core.
  * Spawned on completion; clicking a card with a `resultPath` opens that doc.
+ * `unheard` marks a result whose spoken announcement was skipped (the voice was
+ * busy) — the user can click to hear it, which clears the flag.
  */
 export interface TaskCardView {
   id: number;
@@ -62,6 +64,7 @@ export interface TaskCardView {
   resultType?: string;
   error?: string;
   at: string;
+  unheard?: boolean;
 }
 
 export interface HudState {
@@ -83,6 +86,7 @@ export interface HudState {
   clearNotifications: () => void;
   dismissCard: (id: number) => void;
   clearCards: () => void;
+  speakCard: (id: number, path: string) => void;
   setListening: (on: boolean) => void;
   openDoc: (path: string) => void;
   closeDoc: () => void;
@@ -249,9 +253,17 @@ export function useGateway(): HudState {
         break;
       case "speech":
         setLastSpeech({ text: e.text, at: Date.now() });
-        // Route through the single voice channel: a new clip replaces whatever
-        // was playing, so announcements + repeated Speak clicks never overlap.
-        if (e.audioUrl) speak(e.audioUrl);
+        if (e.audioUrl) {
+          if (e.onDemand) {
+            // The Speak button: interrupt and play now.
+            speakNow(e.audioUrl);
+          } else if (!announceIfIdle(e.audioUrl) && e.path) {
+            // Voice was busy — don't queue; flag the matching card as unheard
+            // so the user can pull it when they want.
+            const path = e.path;
+            setTaskCards((cards) => cards.map((c) => (c.resultPath === path ? { ...c, unheard: true } : c)));
+          }
+        }
         break;
       case "auth.prompt":
         setAuth({ service: e.service, verificationUri: e.verificationUri, userCode: e.userCode, message: e.message });
@@ -313,7 +325,11 @@ export function useGateway(): HudState {
   const clearNotifications = useCallback(() => setNotifications([]), []);
   const dismissCard = useCallback((id: number) => setTaskCards((cards) => cards.filter((c) => c.id !== id)), []);
   const clearCards = useCallback(() => setTaskCards([]), []);
-  const openDoc = useCallback((path: string) => setOpenDocPath(path), []);
+  const openDoc = useCallback((path: string) => {
+    setOpenDocPath(path);
+    // Reading a result counts as hearing it — clear any unheard flag.
+    setTaskCards((cards) => cards.map((c) => (c.resultPath === path && c.unheard ? { ...c, unheard: false } : c)));
+  }, []);
   const closeDoc = useCallback(() => setOpenDocPath(null), []);
   const fetchDoc = useCallback(
     (path: string) => clientRef.current?.fetchDoc(path) ?? Promise.resolve(null),
@@ -375,6 +391,13 @@ export function useGateway(): HudState {
     setListeningRaw(on);
   }, []);
 
+  // Speak a result card on demand (interrupts current audio) and clear its
+  // unheard flag — the user chose to hear it.
+  const speakCard = useCallback((id: number, path: string) => {
+    clientRef.current?.send({ type: "speak", path });
+    setTaskCards((cards) => cards.map((c) => (c.id === id ? { ...c, unheard: false } : c)));
+  }, []);
+
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
     if (speaking) return "speaking";
@@ -403,6 +426,7 @@ export function useGateway(): HudState {
     clearNotifications,
     dismissCard,
     clearCards,
+    speakCard,
     setListening,
     openDoc,
     closeDoc,

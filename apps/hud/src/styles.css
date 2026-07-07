@@ -401,7 +401,7 @@ a { color: var(--magenta); }
 .ccard__body {
   position: relative; min-width: 150px; max-width: 210px; text-align: left; cursor: pointer;
   background: color-mix(in srgb, var(--panel-2) 84%, transparent); border: 1px solid var(--line);
-  border-radius: 7px; padding: 9px 26px 9px 12px; backdrop-filter: blur(3px);
+  border-radius: 7px; padding: 9px 44px 9px 12px; backdrop-filter: blur(3px);
 }
 .ccard__body:hover:not(:disabled) { border-color: var(--magenta); box-shadow: 0 0 18px rgba(255, 61, 154, 0.18); }
 .ccard__body:disabled { cursor: default; }
@@ -417,6 +417,22 @@ a { color: var(--magenta); }
   font-size: 10px; line-height: 1; padding: 3px;
 }
 .ccard__x:hover { color: var(--danger); }
+/* speak-on-demand control, just left of the dismiss ✕ */
+.ccard__speak {
+  position: absolute; top: 50%; right: 24px; transform: translateY(-50%); z-index: 1;
+  background: none; border: none; cursor: pointer; font-size: 11px; line-height: 1; padding: 3px;
+  opacity: 0.75; filter: grayscale(0.3);
+}
+.ccard__speak:hover { opacity: 1; filter: none; }
+/* unheard: a result whose announcement was skipped (voice was busy) */
+.ccard__unheard {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px;
+  vertical-align: middle; background: var(--cyan); box-shadow: 0 0 6px var(--cyan);
+}
+.ccard--unheard .ccard__body { border-color: color-mix(in srgb, var(--cyan) 45%, var(--line)); }
+.otray__speak { background: none; border: none; cursor: pointer; font-size: 11px; padding: 3px; opacity: 0.75; }
+.otray__speak:hover { opacity: 1; }
+.otray__row--unheard .otray__label { color: var(--cyan); }
 
 .center__speech {
   position: absolute; bottom: 10px; max-width: 80%; text-align: center;

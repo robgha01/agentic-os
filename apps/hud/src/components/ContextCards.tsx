@@ -193,16 +193,33 @@ function Card({
   const sub =
     c.status === "failed" ? (c.error ?? "failed") : c.resultType ? `${c.resultType} · open ↗` : "open ↗";
   return (
-    <div className={`ccard ccard--${corner}`} data-status={c.status} ref={(el) => setRef(c.id, el)}>
+    <div
+      className={`ccard ccard--${corner}${c.unheard ? " ccard--unheard" : ""}`}
+      data-status={c.status}
+      ref={(el) => setRef(c.id, el)}
+    >
       <button
         className="ccard__body"
         onClick={() => clickable && hud.openDoc(c.resultPath!)}
         disabled={!clickable}
         title={clickable ? `Open ${c.label}` : c.error}
       >
-        <span className="ccard__label">{c.label}</span>
+        <span className="ccard__label">
+          {c.unheard ? <span className="ccard__unheard" aria-label="unheard" /> : null}
+          {c.label}
+        </span>
         <span className="ccard__sub">{sub}</span>
       </button>
+      {clickable ? (
+        <button
+          className="ccard__speak"
+          onClick={() => hud.speakCard(c.id, c.resultPath!)}
+          aria-label={`Speak ${c.label}`}
+          title={`Speak ${c.label}`}
+        >
+          🔊
+        </button>
+      ) : null}
       <button className="ccard__x" onClick={() => hud.dismissCard(c.id)} aria-label={`Dismiss ${c.label}`}>
         ✕
       </button>
@@ -215,16 +232,29 @@ function TrayRow({ card: c, hud }: { card: TaskCardView; hud: HudState }) {
   const clickable = c.status === "done" && Boolean(c.resultPath);
   const sub = c.status === "failed" ? (c.error ?? "failed") : c.resultType ?? "open ↗";
   return (
-    <div className="otray__row" data-status={c.status} role="listitem">
+    <div className={`otray__row${c.unheard ? " otray__row--unheard" : ""}`} data-status={c.status} role="listitem">
       <button
         className="otray__body"
         onClick={() => clickable && hud.openDoc(c.resultPath!)}
         disabled={!clickable}
         title={clickable ? `Open ${c.label}` : c.error}
       >
-        <span className="otray__label">{c.label}</span>
+        <span className="otray__label">
+          {c.unheard ? <span className="ccard__unheard" aria-label="unheard" /> : null}
+          {c.label}
+        </span>
         <span className="otray__sub">{sub}</span>
       </button>
+      {clickable ? (
+        <button
+          className="otray__speak"
+          onClick={() => hud.speakCard(c.id, c.resultPath!)}
+          aria-label={`Speak ${c.label}`}
+          title={`Speak ${c.label}`}
+        >
+          🔊
+        </button>
+      ) : null}
       <button className="otray__x" onClick={() => hud.dismissCard(c.id)} aria-label={`Dismiss ${c.label}`}>
         ✕
       </button>
