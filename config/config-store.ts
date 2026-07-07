@@ -38,6 +38,7 @@ export const EDITABLE_KEYS = [
   "voice.mode",
   "voice.announce",
   "voice.tts.provider",
+  "voice.tts.voice",
   "voice.stt.provider",
   "mail.provider",
   "mail.tokenSource",

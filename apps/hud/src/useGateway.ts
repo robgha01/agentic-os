@@ -12,6 +12,7 @@ import {
   GatewayClient,
   type ConfigView,
   type ConnectionStatus,
+  type TtsStatus,
   type VaultDoc,
   type VaultSummary,
 } from "./gateway.js";
@@ -84,6 +85,8 @@ export interface HudState {
   fetchConfig: () => Promise<ConfigView>;
   saveSettings: (partial: Record<string, string>) => Promise<void>;
   saveSecret: (key: string, value: string) => Promise<void>;
+  getTtsStatus: (provider: string) => Promise<TtsStatus>;
+  installTts: () => Promise<TtsStatus>;
 }
 
 const MAX_OPS = 60;
@@ -316,6 +319,14 @@ export function useGateway(): HudState {
     (key: string, value: string) => clientRef.current?.saveSecret(key, value) ?? Promise.resolve(),
     [],
   );
+  const getTtsStatus = useCallback(
+    (provider: string) => clientRef.current?.getTtsStatus(provider) ?? Promise.reject(new Error("not connected")),
+    [],
+  );
+  const installTts = useCallback(
+    () => clientRef.current?.installTts() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
 
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
@@ -352,5 +363,7 @@ export function useGateway(): HudState {
     fetchConfig,
     saveSettings,
     saveSecret,
+    getTtsStatus,
+    installTts,
   };
 }

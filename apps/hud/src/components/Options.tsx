@@ -7,41 +7,14 @@
 import { useEffect, useState } from "react";
 import type { ConfigView } from "../gateway.js";
 import type { HudState } from "../useGateway.js";
+import { Select, Text } from "./opt-controls.js";
+import { VoiceOptions } from "./VoiceOptions.js";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="opt__row">
       <span className="opt__key">{label}</span>
       <span className="opt__val">{value}</span>
-    </div>
-  );
-}
-
-// Module-scope controls: defining these inside Options would create a NEW
-// component type per render, remounting the input (and dropping focus) on
-// every keystroke.
-function Select({ label, value, options, onChange }: {
-  label: string; value: string; options: string[]; onChange: (v: string) => void;
-}) {
-  return (
-    <div className="opt__row">
-      <span className="opt__key">{label}</span>
-      <select className="opt__select" value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => (
-          <option key={o} value={o}>{o}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function Text({ label, value, placeholder, onChange }: {
-  label: string; value: string; placeholder?: string; onChange: (v: string) => void;
-}) {
-  return (
-    <div className="opt__row">
-      <span className="opt__key">{label}</span>
-      <input className="opt__select" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
@@ -212,15 +185,14 @@ export function Options({ hud }: { hud: HudState }) {
         </p>
       </section>
 
-      <section className="opt">
-        <h2 className="opt__h">Voice</h2>
-        <Select label="Mode" {...bind("voice.mode", cfg.voice.mode)} options={["text", "voice"]} />
-        <Select label="TTS engine" {...bind("voice.tts.provider", cfg.voice.tts)} options={["kokoro", "kokoro-onnx", "openai", "elevenlabs"]} />
-        <Select label="STT engine" {...bind("voice.stt.provider", cfg.voice.stt)} options={["faster-whisper", "openai"]} />
-        <p className="opt__hint">
-          <code>voice</code> mode uses the Python sidecar; cloud engines need their key set in the environment.
-        </p>
-      </section>
+      <VoiceOptions
+        bind={bind}
+        mode={cfg.voice.mode}
+        ttsValue={valueOf("voice.tts.provider", cfg.voice.tts)}
+        voiceValue={valueOf("voice.tts.voice", cfg.voice.voice)}
+        sttValue={valueOf("voice.stt.provider", cfg.voice.stt)}
+        hud={hud}
+      />
 
       <section className="opt">
         <h2 className="opt__h">Mail (inbox triage)</h2>
