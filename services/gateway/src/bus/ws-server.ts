@@ -26,6 +26,7 @@ import { serveHud } from "./static-hud.js";
 import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
 import { now, type EventBus } from "./event-bus.js";
 import { installMisaki, installTts, misakiStatus, sidecarHealth, ttsStatus } from "../voice/installer.js";
+import { startSidecar, stopSidecar } from "../voice/sidecar.js";
 
 export class GatewayServer {
   private readonly http: Server;
@@ -177,6 +178,31 @@ export class GatewayServer {
         void misakiStatus().then(
           (status) => json(res, status),
           (e) => json(res, { installed: false, error: String(e) }),
+        );
+        return;
+      }
+
+      // Start/stop the voice sidecar as a gateway-managed child. Same CSRF gate.
+      if (req.method === "POST" && (url.pathname === "/voice/sidecar/start" || url.pathname === "/voice/sidecar/stop")) {
+        if (!originOk(req.headers.origin)) {
+          return json(res, { ok: false, error: "forbidden origin" }, 403);
+        }
+        const starting = url.pathname.endsWith("/start");
+        void (starting ? startSidecar() : stopSidecar()).then(
+          (r) => {
+            this.bus.emit({
+              type: "notification",
+              at: now(),
+              level: r.error ? "error" : "info",
+              message: r.error
+                ? `Voice sidecar: ${r.error}`
+                : starting
+                  ? r.online ? "Voice sidecar online." : "Voice sidecar did not start."
+                  : "Voice sidecar stopped.",
+            });
+            json(res, r);
+          },
+          (e) => json(res, { online: false, error: String(e) }, 503),
         );
         return;
       }
