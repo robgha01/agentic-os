@@ -110,7 +110,7 @@ async function main(): Promise<void> {
     vault,
     config.ports.gateway,
     applyConfig,
-    (text) => void speaker.say(text, { onDemand: true }), // the "Speak this record" button — play now, don't queue
+    (text, quiet) => void speaker.say(text, { onDemand: true, quiet }), // "Speak this record" — play now; quiet = no nag when audio's unavailable
     () => providerReadiness(runtime),
     scheduler,
   );

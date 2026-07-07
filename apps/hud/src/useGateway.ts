@@ -408,11 +408,14 @@ export function useGateway(): HudState {
     setListeningRaw(on);
   }, []);
 
-  // Speak a result card on demand (interrupts current audio) and clear its
-  // unheard flag — the user chose to hear it.
+  // Clicking a result card ALWAYS opens the document — opening is a pure
+  // client-side action, never gated on audio. The spoken announcement is
+  // additive: `quiet` suppresses the "voice is off / sidecar down" nags, since
+  // the user clicked to see the result, not to demand voice.
   const speakCard = useCallback((id: number, path: string) => {
-    clientRef.current?.send({ type: "speak", path });
+    setOpenDocPath(path);
     setTaskCards((cards) => cards.map((c) => (c.id === id ? { ...c, unheard: false } : c)));
+    clientRef.current?.send({ type: "speak", path, quiet: true });
   }, []);
 
   const coreState: CoreState = useMemo(() => {

@@ -76,8 +76,10 @@ export type ClientCommand =
   | { type: "route"; input: string }
   /** Deterministic command-deck button -> invoke a skill by id, no routing. */
   | { type: "invoke"; skillId: string; params?: Record<string, unknown> }
-  /** Speak a vault record aloud — the OS reads its spoken core (TL;DR blockquote). */
-  | { type: "speak"; path: string }
+  /** Speak a vault record aloud — the OS reads its spoken core (TL;DR blockquote).
+   *  `quiet`: best-effort — stay silent (no "voice is off" nag) if audio is
+   *  unavailable. Used when speaking is a bonus to another action (opening a card). */
+  | { type: "speak"; path: string; quiet?: boolean }
   | { type: "ping" };
 
 // --- Runtime validation (the wire is untrusted on both ends) -----------------
@@ -131,7 +133,7 @@ export const OsEventSchema = z.discriminatedUnion("type", [
 export const ClientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("route"), input: z.string().min(1) }),
   z.object({ type: z.literal("invoke"), skillId: z.string().min(1), params: z.record(z.unknown()).optional() }),
-  z.object({ type: z.literal("speak"), path: z.string().min(1) }),
+  z.object({ type: z.literal("speak"), path: z.string().min(1), quiet: z.boolean().optional() }),
   z.object({ type: z.literal("ping") }),
 ]) as unknown as z.ZodType<ClientCommand>;
 

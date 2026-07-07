@@ -43,7 +43,7 @@ export class GatewayServer {
     private readonly vault: VaultAdapter,
     private readonly requestedPort: number,
     private readonly onSettingsChange?: () => Promise<void>,
-    private readonly speak?: (text: string) => void,
+    private readonly speak?: (text: string, quiet?: boolean) => void,
     private readonly providers?: () => import("@aos/shared").ProviderReadiness[],
     private readonly scheduler?: import("../dispatch/scheduler.js").Scheduler,
   ) {
@@ -417,7 +417,7 @@ export class GatewayServer {
         return;
       case "speak":
         // Read a record's spoken core (TL;DR blockquote) aloud.
-        this.speakDocument(cmd.path);
+        this.speakDocument(cmd.path, cmd.quiet);
         return;
       default:
         this.send(ws, { type: "notification", at: new Date().toISOString(), level: "error", message: "unknown command" });
@@ -431,12 +431,12 @@ export class GatewayServer {
     else void guarded(randomUUID());
   }
 
-  private speakDocument(path: string): void {
+  private speakDocument(path: string, quiet?: boolean): void {
     const doc = this.vault.readByPath(path);
     if (!doc) return;
     const core = extractSpokenCore(doc.body);
     const text = core || `${doc.frontmatter.title}.`;
-    this.speak?.(text);
+    this.speak?.(text, quiet);
   }
 
   private emitDispatchError(err: unknown): void {

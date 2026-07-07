@@ -29,7 +29,10 @@ export class Speaker {
    * plays it immediately; `path` names the source record so the HUD can mark
    * its card unheard when it skips an announcement (voice already busy).
    */
-  async say(text: string, opts: { onDemand?: boolean; path?: string } = {}): Promise<void> {
+  async say(text: string, opts: { onDemand?: boolean; path?: string; quiet?: boolean } = {}): Promise<void> {
+    // `quiet` = best-effort speech (a bonus to some other action, e.g. opening a
+    // card): still try to play, but don't nag when audio is unavailable.
+    const nag = opts.onDemand && !opts.quiet;
     if (this.mode === "voice") {
       try {
         if (await this.tts.available()) {
@@ -49,11 +52,11 @@ export class Speaker {
           }
         }
         // voice mode but the sidecar/engine couldn't produce audio
-        if (opts.onDemand) this.note("Couldn't synthesize speech — is the voice sidecar running? Showing text.");
+        if (nag) this.note("Couldn't synthesize speech — is the voice sidecar running? Showing text.");
       } catch {
-        if (opts.onDemand) this.note("Voice synthesis errored — showing text.");
+        if (nag) this.note("Voice synthesis errored — showing text.");
       }
-    } else if (opts.onDemand) {
+    } else if (nag) {
       // The user explicitly asked to hear this, but voice output is off.
       this.note("Voice output is off (text mode) — turn on Voice output in Audio I/O to hear results.");
     }
