@@ -249,7 +249,9 @@ export function useGateway(): HudState {
         setLastSpeech({ text: e.text, at: Date.now() });
         // One element per event so a second announcement doesn't cut off the
         // first mid-sentence (they overlap rather than truncate).
-        if (e.audioUrl) void new Audio(e.audioUrl).play().catch(() => {});
+        // Autoplay may be blocked until the first user gesture, or the clip URL
+        // may be unreachable — surface it rather than failing silently.
+        if (e.audioUrl) void new Audio(e.audioUrl).play().catch((err) => console.warn("[voice] audio playback failed:", err?.message ?? err));
         break;
       case "auth.prompt":
         setAuth({ service: e.service, verificationUri: e.verificationUri, userCode: e.userCode, message: e.message });

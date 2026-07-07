@@ -5,8 +5,33 @@
  * stop only kills a child WE spawned — an externally-run sidecar is left alone.
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { config } from "../../../../config/agentic-os.config.js";
 import { sidecarHealth } from "./installer.js";
 import { resolvePython, useShell, voiceDir } from "./env.js";
+
+/**
+ * The child env for a gateway-started sidecar. Critically, this bridges the
+ * gateway's voice config (what the user picked in the HUD) into the sidecar's
+ * OWN env vars — the sidecar selects its TTS/STT engine from env at startup, so
+ * without this it silently loads its default (`kokoro`) instead of, say, the
+ * `kokoro-onnx` the user chose, and synthesis fails against the wrong engine.
+ */
+function sidecarEnv(): NodeJS.ProcessEnv {
+  const v = config.voice;
+  const e: NodeJS.ProcessEnv = {
+    ...process.env,
+    // Watchdog: self-exit if the gateway dies ungracefully (SIGKILL/crash).
+    AGENTIC_OS_PARENT_PID: String(process.pid),
+    AGENTIC_OS_TTS_PROVIDER: v.tts.provider,
+    AGENTIC_OS_STT_PROVIDER: v.stt.provider,
+    AGENTIC_OS_VOICE_PORT: String(config.ports.voice),
+  };
+  if (v.tts.voice) e.AGENTIC_OS_TTS_VOICE = v.tts.voice;
+  if (v.tts.apiKeyEnv) e.AGENTIC_OS_TTS_API_KEY_ENV = v.tts.apiKeyEnv;
+  if (v.stt.model) e.AGENTIC_OS_STT_MODEL = v.stt.model;
+  if (v.stt.apiKeyEnv) e.AGENTIC_OS_STT_API_KEY_ENV = v.stt.apiKeyEnv;
+  return e;
+}
 
 export interface SidecarActionResult {
   online: boolean;
@@ -34,13 +59,11 @@ export async function startSidecar(): Promise<SidecarActionResult> {
     return { online: false, error: "no Python found — set voice.pythonPath (pyenv/uv/conda) or create a venv in services/voice" };
   }
   try {
-    // Pass our PID so the sidecar's watchdog self-exits if the gateway dies
-    // ungracefully (SIGKILL/crash), closing the orphan gap the shutdown hook can't.
     child = spawn(python, ["server.py"], {
       cwd: voiceDir(),
       stdio: "ignore",
       shell: useShell(python),
-      env: { ...process.env, AGENTIC_OS_PARENT_PID: String(process.pid) },
+      env: sidecarEnv(),
     });
     child.on("exit", () => {
       child = null;

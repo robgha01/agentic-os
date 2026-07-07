@@ -166,6 +166,35 @@ a { color: var(--magenta); }
 .status--connecting { color: var(--amber); }
 .status--offline { color: var(--danger); }
 
+/* Voice-sidecar on/off toggle — styled to match the flat .status text beside
+   it (same micro-caps), just clickable with a leading state dot. */
+.sidecar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--mute);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s, opacity 0.15s;
+}
+.sidecar-pill::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+.sidecar-pill:hover:not(:disabled) { opacity: 0.8; }
+.sidecar-pill:disabled { cursor: progress; }
+.sidecar-pill--on { color: var(--cyan); }
+.sidecar-pill--on::before { opacity: 1; box-shadow: 0 0 6px var(--cyan); }
+
 .topbar__notes { display: flex; align-items: center; gap: 10px; min-width: 0; justify-content: flex-end; }
 .bubbles { display: flex; gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
 .bubble {

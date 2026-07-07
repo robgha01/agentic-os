@@ -20,6 +20,58 @@ function useClock(): string {
   return now.toLocaleTimeString([], { hour12: false });
 }
 
+/**
+ * Voice-sidecar status pill + one-click on/off, sitting next to the gateway
+ * connection status. Polls /voice/health so it reflects a sidecar started or
+ * stopped anywhere; the click starts it (offline) or stops it (online).
+ */
+function SidecarToggle({ hud }: { hud: HudState }) {
+  const [online, setOnline] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Stable method refs — `hud` is a new object each tick, so depending on it
+  // would restart the poller constantly.
+  const { getSidecarHealth, startSidecar, stopSidecar } = hud;
+
+  useEffect(() => {
+    let alive = true;
+    const poll = () =>
+      getSidecarHealth()
+        .then((h) => alive && setOnline(h.online))
+        .catch(() => alive && setOnline(false));
+    poll();
+    const id = window.setInterval(poll, 5000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [getSidecarHealth]);
+
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      setOnline((online ? await stopSidecar() : await startSidecar()).online);
+    } catch {
+      /* a notification event covers the failure */
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const label = busy ? "sidecar …" : online == null ? "sidecar …" : online ? "sidecar on" : "sidecar off";
+  return (
+    <button
+      className={`sidecar-pill ${online ? "sidecar-pill--on" : ""}`}
+      onClick={toggle}
+      disabled={busy}
+      role="switch"
+      aria-checked={!!online}
+      title={online ? "Voice sidecar running — click to stop" : "Voice sidecar stopped — click to start"}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function TopBar({ hud, view, onNav }: { hud: HudState; view: ViewId; onNav: (v: ViewId) => void }) {
   const clock = useClock();
   return (
@@ -38,6 +90,7 @@ export function TopBar({ hud, view, onNav }: { hud: HudState; view: ViewId; onNa
           ))}
         </nav>
         <span className={`status status--${hud.status}`}>{hud.status}</span>
+        <SidecarToggle hud={hud} />
       </div>
 
       <div className="topbar__notes">
