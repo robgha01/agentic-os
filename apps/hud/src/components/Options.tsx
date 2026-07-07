@@ -5,7 +5,7 @@
  * never entered here (Outlook uses device-code sign-in).
  */
 import { useEffect, useState } from "react";
-import type { ConfigView } from "../gateway.js";
+import { GATEWAY_BASE, getGatewayOverride, normalizeGatewayUrl, setGatewayOverride, type ConfigView } from "../gateway.js";
 import type { HudState } from "../useGateway.js";
 import { Select, Text } from "./opt-controls.js";
 import { VoiceOptions } from "./VoiceOptions.js";
@@ -183,6 +183,7 @@ export function Options({ hud }: { hud: HudState }) {
           requests (DNS-rebinding + CSRF defense). Turn on to reach it over your LAN —
           only on a network you trust. Applies live.
         </p>
+        <GatewayAddress />
       </section>
 
       <VoiceOptions
@@ -251,6 +252,51 @@ export function Options({ hud }: { hud: HudState }) {
         <Row label="Path" value={cfg.vault.path} />
       </section>
     </div>
+  );
+}
+
+/**
+ * Manual gateway address — a client-side override for where the HUD calls the
+ * backend. Left blank it auto-resolves (same origin when the gateway serves the
+ * HUD, localhost in dev); type an address to point anywhere (e.g. a Tailscale
+ * IP). Persisted in localStorage; a reload re-establishes the connection.
+ */
+function GatewayAddress() {
+  const [value, setValue] = useState(getGatewayOverride() ?? "");
+  const overridden = getGatewayOverride() != null;
+  const apply = () => {
+    setGatewayOverride(normalizeGatewayUrl(value));
+    window.location.reload();
+  };
+  const reset = () => {
+    setGatewayOverride(null);
+    window.location.reload();
+  };
+  return (
+    <>
+      <div className="opt__row">
+        <span className="opt__key">
+          Gateway address
+          <span className="opt__sub">{overridden ? "manual" : "auto"} · now: {GATEWAY_BASE}</span>
+        </span>
+        <span className="opt__secret">
+          <input
+            className="opt__select"
+            value={value}
+            placeholder="auto — or e.g. http://100.x.y.z:7777"
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && apply()}
+          />
+          <button className="opt__save" onClick={apply}>set</button>
+          {overridden ? <button className="opt__save" onClick={reset}>auto</button> : null}
+        </span>
+      </div>
+      <p className="opt__hint">
+        Where this HUD calls the gateway. Blank = auto (the server it was loaded from, or
+        <code> localhost</code> in dev). Set it to reach a gateway elsewhere — e.g. your laptop's
+        Tailscale address from your phone. Saved on this device; reloads to reconnect.
+      </p>
+    </>
   );
 }
 
