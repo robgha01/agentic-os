@@ -1,5 +1,46 @@
-/** Thin proxy to the Python voice sidecar's TTS status/install endpoints. */
-import { config } from "../../../../config/agentic-os.config.js";
+/**
+ * kokoro-onnx model-file provisioning — owned by the gateway, NOT the sidecar.
+ *
+ * Downloading two files from a fixed URL needs no Python, and the gateway is the
+ * always-on service, so status/install work even when the voice sidecar isn't
+ * running (the sidecar is only needed later, to actually synthesize speech). The
+ * gateway writes into the SAME models dir the sidecar reads (same env vars +
+ * default), so an installed model is immediately usable once the sidecar starts.
+ *
+ * The release URL is hardcoded — never sourced from config/request (SSRF guard).
+ */
+import { createWriteStream } from "node:fs";
+import { mkdir, rename, stat } from "node:fs/promises";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+
+const RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/";
+
+/** Default: <repo>/services/voice/models/<file>, overridable via the same env
+ *  vars the Python sidecar honors, so both sides resolve identical paths. */
+function assetPath(filename: string, envVar: string): string {
+  const override = process.env[envVar];
+  if (override) return override;
+  return fileURLToPath(new URL(`../../../../services/voice/models/${filename}`, import.meta.url));
+}
+
+interface Asset { filename: string; path: string }
+function assets(): Asset[] {
+  return [
+    { filename: "kokoro-v1.0.onnx", path: assetPath("kokoro-v1.0.onnx", "AGENTIC_OS_TTS_KOKORO_ONNX_MODEL") },
+    { filename: "voices-v1.0.bin", path: assetPath("voices-v1.0.bin", "AGENTIC_OS_TTS_KOKORO_ONNX_VOICES") },
+  ];
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
 
 export interface TtsInstallStatus {
   provider: string;
@@ -8,23 +49,35 @@ export interface TtsInstallStatus {
   missing: string[];
 }
 
-const base = () => config.voice.sidecarUrl;
-
-export async function ttsStatus(provider?: string): Promise<TtsInstallStatus> {
-  const q = provider ? `?provider=${encodeURIComponent(provider)}` : "";
-  const res = await fetch(`${base()}/tts/status${q}`, { signal: AbortSignal.timeout(2000) });
-  if (!res.ok) throw new Error(`sidecar status ${res.status}`);
-  return (await res.json()) as TtsInstallStatus;
+export async function ttsStatus(provider = "kokoro-onnx"): Promise<TtsInstallStatus> {
+  if (provider !== "kokoro-onnx") {
+    return { provider, installable: false, ready: true, missing: [] };
+  }
+  const missing: string[] = [];
+  for (const a of assets()) if (!(await exists(a.path))) missing.push(a.filename);
+  return { provider: "kokoro-onnx", installable: true, ready: missing.length === 0, missing };
 }
 
-/** Long-running: downloads model assets. 10-min ceiling. */
-export async function installTts(provider = "kokoro-onnx"): Promise<TtsInstallStatus & { log?: string[] }> {
-  const res = await fetch(`${base()}/tts/install`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ provider }),
-    signal: AbortSignal.timeout(600_000),
-  });
-  if (!res.ok) throw new Error((await res.text()) || `sidecar install ${res.status}`);
-  return (await res.json()) as TtsInstallStatus & { log?: string[] };
+/** Download any missing assets. Idempotent; each write goes to a .part then is
+ *  atomically renamed so an interrupted download never looks complete. */
+export async function installTts(
+  provider = "kokoro-onnx",
+  onProgress?: (msg: string) => void,
+): Promise<TtsInstallStatus> {
+  if (provider !== "kokoro-onnx") throw new Error("only kokoro-onnx is installable");
+  for (const a of assets()) {
+    if (await exists(a.path)) {
+      onProgress?.(`${a.filename}: already present`);
+      continue;
+    }
+    await mkdir(dirname(a.path), { recursive: true });
+    onProgress?.(`${a.filename}: downloading…`);
+    const res = await fetch(RELEASE + a.filename, { redirect: "follow" });
+    if (!res.ok || !res.body) throw new Error(`download ${a.filename} failed (${res.status})`);
+    const tmp = `${a.path}.part`;
+    await pipeline(Readable.fromWeb(res.body as import("node:stream/web").ReadableStream), createWriteStream(tmp));
+    await rename(tmp, a.path);
+    onProgress?.(`${a.filename}: done`);
+  }
+  return ttsStatus(provider);
 }

@@ -70,17 +70,17 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, hud }
               <span className="opt__key">
                 Model files
                 <span className={`opt__chip ${status?.ready ? "opt__chip--on" : ""}`}>
-                  {status == null ? "…" : status.error ? "sidecar offline" : status.ready ? "ready ✓" : "missing"}
+                  {status == null ? "…" : status.ready ? "ready ✓" : "missing"}
                 </span>
                 <span className="opt__sub">
                   {status?.error
-                    ? "start the voice sidecar to check / install"
+                    ? status.error
                     : status && !status.ready && status.missing.length
                       ? status.missing.join(", ")
-                      : "ONNX model + voices"}
+                      : "ONNX model + voices — the sidecar reads these to speak"}
                 </span>
               </span>
-              {status && !status.ready && !status.error ? (
+              {status && !status.ready ? (
                 <button className="opt__btn" disabled={busy} onClick={install}>
                   {busy ? "Downloading… (~330 MB)" : "Download models (~330 MB)"}
                 </button>

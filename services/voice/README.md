@@ -66,13 +66,13 @@ AGENTIC_OS_VOICE_MODE=voice npm run start
 - `GET  /health` → `{ status, stt, tts }`
 - `POST /stt` (multipart `audio`) → `{ text }`
 - `POST /tts` (`{ text, voice? }`) → `{ audioUrl }`
-- `GET  /tts/status?provider=` → `{ provider, installable, ready, missing[] }`
-- `POST /tts/install` (`{ provider? }`) → downloads kokoro-onnx assets → status
 - `GET  /audio/<file>` → the synthesized clip
 
-> The gateway proxies the two `/tts/*` install routes as `GET /voice/tts/status`
-> and `POST /voice/tts/install` (localhost/CSRF-gated), emitting notifications the
-> HUD feed renders. The HUD's Download button drives these.
+> **Model provisioning lives in the gateway, not here.** The gateway is the
+> always-on service, so `GET /voice/tts/status` + `POST /voice/tts/install`
+> (localhost/CSRF-gated, driven by the HUD's Download button) check and download
+> the kokoro-onnx assets into `services/voice/models/` **without needing this
+> sidecar running**. The sidecar only *reads* those files at synthesis time.
 
 > Files: `server.py` (FastAPI), `stt.py` / `tts.py` (provider factories),
 > `config.py` (env). The local engines (faster-whisper, Kokoro) are large
