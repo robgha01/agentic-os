@@ -129,7 +129,9 @@ export class GatewayServer {
             mail: {
               provider: config.mail.provider,
               tokenSource: config.mail.tokenSource,
-              signedIn: config.mail.provider === "outlook" && existsSync(config.mail.tokenStorePath),
+              signedIn:
+                config.mail.provider === "outlook" &&
+                (secretPresence()["mail.refreshToken"] || existsSync(config.mail.tokenStorePath)),
             },
             research: {
               sources: [
