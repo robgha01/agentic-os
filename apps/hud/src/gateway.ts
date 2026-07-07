@@ -63,6 +63,15 @@ export interface SidecarHealth {
   stt?: string;
 }
 
+/** Result of a gateway-managed sidecar start/stop. */
+export interface SidecarActionResult {
+  online: boolean;
+  started?: boolean;
+  stopped?: boolean;
+  note?: string;
+  error?: string;
+}
+
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
   voice: { mode: string; announce: boolean; stt: string; tts: string; voice: string };
@@ -191,6 +200,24 @@ export class GatewayClient {
   async getSidecarHealth(): Promise<SidecarHealth> {
     const res = await fetch(`${HTTP_BASE}/voice/health`);
     return (await res.json()) as SidecarHealth;
+  }
+
+  async startSidecar(): Promise<SidecarActionResult> {
+    const res = await fetch(`${HTTP_BASE}/voice/sidecar/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    return (await res.json()) as SidecarActionResult;
+  }
+
+  async stopSidecar(): Promise<SidecarActionResult> {
+    const res = await fetch(`${HTTP_BASE}/voice/sidecar/stop`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    return (await res.json()) as SidecarActionResult;
   }
 
   async getMisakiStatus(): Promise<MisakiStatus> {
