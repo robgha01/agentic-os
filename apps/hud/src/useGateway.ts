@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand, OsEvent, SkillCard } from "@aos/shared";
-import { announceIfIdle, onSpeakingChange, speakNow, stopSpeaking } from "./audio-player.js";
+import { announceIfIdle, onSpeakingChange, primeAudio, speakNow, stopSpeaking } from "./audio-player.js";
 import {
   GatewayClient,
   type ConfigView,
@@ -387,6 +387,18 @@ export function useGateway(): HudState {
 
   // Mirror the single voice channel's real playback state into React.
   useEffect(() => onSpeakingChange(setSpeaking), []);
+
+  // Unlock audio on the user's first interaction so later (async) TTS clips
+  // aren't silently blocked by the browser autoplay policy.
+  useEffect(() => {
+    const prime = () => primeAudio();
+    window.addEventListener("pointerdown", prime, { once: true });
+    window.addEventListener("keydown", prime, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", prime);
+      window.removeEventListener("keydown", prime);
+    };
+  }, []);
 
   // Barge-in: the moment you start talking (hold-to-talk) or typing (command
   // bar focus), cut the OS off mid-sentence — one voice at a time, and it's

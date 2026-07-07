@@ -48,12 +48,22 @@ export class Speaker {
             return;
           }
         }
+        // voice mode but the sidecar/engine couldn't produce audio
+        if (opts.onDemand) this.note("Couldn't synthesize speech — is the voice sidecar running? Showing text.");
       } catch {
-        // fall through to text
+        if (opts.onDemand) this.note("Voice synthesis errored — showing text.");
       }
+    } else if (opts.onDemand) {
+      // The user explicitly asked to hear this, but voice output is off.
+      this.note("Voice output is off (text mode) — turn on Voice output in Audio I/O to hear results.");
     }
     // text mode, or voice unavailable -> graceful text fallback
     this.bus.emit({ type: "speech", at: now(), text, mode: "text", onDemand: opts.onDemand, path: opts.path });
+  }
+
+  private note(message: string): void {
+    // `speak: false` so this reason isn't itself spoken (there's no audio anyway).
+    this.bus.emit({ type: "notification", at: now(), level: "info", message, speak: false });
   }
 }
 

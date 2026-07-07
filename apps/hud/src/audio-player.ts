@@ -26,6 +26,26 @@ function emit(next: boolean): void {
   for (const l of listeners) l(playing);
 }
 
+// A 0-sample silent WAV — played once on the first user gesture to satisfy the
+// browser autoplay policy, so later script-initiated clips aren't blocked.
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+let primed = false;
+
+/** Unlock audio playback on a user gesture. Safe to call repeatedly; only the
+ *  first call does anything. Wire it to the first pointerdown/keydown. */
+export function primeAudio(): void {
+  if (primed) return;
+  primed = true;
+  try {
+    const a = new Audio(SILENT_WAV);
+    a.volume = 0;
+    void a.play().catch(() => {});
+  } catch {
+    /* ignore — best-effort unlock */
+  }
+}
+
 /** Whether a clip is playing right now. */
 export function isSpeaking(): boolean {
   return playing;

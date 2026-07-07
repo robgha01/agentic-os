@@ -190,8 +190,7 @@ function Card({
   setRef: (id: number, el: HTMLDivElement | null) => void;
 }) {
   const clickable = c.status === "done" && Boolean(c.resultPath);
-  const sub =
-    c.status === "failed" ? (c.error ?? "failed") : c.resultType ? `${c.resultType} · open ↗` : "open ↗";
+  const sub = c.status === "failed" ? (c.error ?? "failed") : c.resultType ? `${c.resultType} · tap to hear` : "tap to hear";
   return (
     <div
       className={`ccard ccard--${corner}${c.unheard ? " ccard--unheard" : ""}`}
@@ -200,9 +199,9 @@ function Card({
     >
       <button
         className="ccard__body"
-        onClick={() => clickable && hud.openDoc(c.resultPath!)}
+        onClick={() => clickable && hud.speakCard(c.id, c.resultPath!)}
         disabled={!clickable}
-        title={clickable ? `Open ${c.label}` : c.error}
+        title={clickable ? `Speak ${c.label}` : c.error}
       >
         <span className="ccard__label">
           {c.unheard ? <span className="ccard__unheard" aria-label="unheard" /> : null}
@@ -210,16 +209,6 @@ function Card({
         </span>
         <span className="ccard__sub">{sub}</span>
       </button>
-      {clickable ? (
-        <button
-          className="ccard__speak"
-          onClick={() => hud.speakCard(c.id, c.resultPath!)}
-          aria-label={`Speak ${c.label}`}
-          title={`Speak ${c.label}`}
-        >
-          🔊
-        </button>
-      ) : null}
       <button className="ccard__x" onClick={() => hud.dismissCard(c.id)} aria-label={`Dismiss ${c.label}`}>
         ✕
       </button>
@@ -230,14 +219,14 @@ function Card({
 /** One row in the overflow tray — same click/dismiss behavior, list layout. */
 function TrayRow({ card: c, hud }: { card: TaskCardView; hud: HudState }) {
   const clickable = c.status === "done" && Boolean(c.resultPath);
-  const sub = c.status === "failed" ? (c.error ?? "failed") : c.resultType ?? "open ↗";
+  const sub = c.status === "failed" ? (c.error ?? "failed") : c.resultType ?? "tap to hear";
   return (
     <div className={`otray__row${c.unheard ? " otray__row--unheard" : ""}`} data-status={c.status} role="listitem">
       <button
         className="otray__body"
-        onClick={() => clickable && hud.openDoc(c.resultPath!)}
+        onClick={() => clickable && hud.speakCard(c.id, c.resultPath!)}
         disabled={!clickable}
-        title={clickable ? `Open ${c.label}` : c.error}
+        title={clickable ? `Speak ${c.label}` : c.error}
       >
         <span className="otray__label">
           {c.unheard ? <span className="ccard__unheard" aria-label="unheard" /> : null}
@@ -245,16 +234,6 @@ function TrayRow({ card: c, hud }: { card: TaskCardView; hud: HudState }) {
         </span>
         <span className="otray__sub">{sub}</span>
       </button>
-      {clickable ? (
-        <button
-          className="otray__speak"
-          onClick={() => hud.speakCard(c.id, c.resultPath!)}
-          aria-label={`Speak ${c.label}`}
-          title={`Speak ${c.label}`}
-        >
-          🔊
-        </button>
-      ) : null}
       <button className="otray__x" onClick={() => hud.dismissCard(c.id)} aria-label={`Dismiss ${c.label}`}>
         ✕
       </button>
