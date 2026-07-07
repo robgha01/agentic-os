@@ -256,13 +256,35 @@ a { color: var(--magenta); }
 .orbit__links { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: visible; }
 .orbit__links line { stroke: var(--violet); stroke-width: 1; opacity: 0.5; }
 .orbit__links circle { fill: var(--magenta); opacity: 0.85; }
-.orbit__clear {
+.orbit__controls {
   position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; align-items: center; white-space: nowrap;
+}
+.orbit__more, .orbit__clear {
   font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em;
   color: var(--mute); background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: 999px; padding: 4px 12px; cursor: pointer; white-space: nowrap;
+  border-radius: 999px; padding: 4px 12px; cursor: pointer;
 }
-.orbit__clear:hover { color: var(--ink); border-color: var(--magenta); }
+.orbit__more:hover, .orbit__clear:hover { color: var(--ink); border-color: var(--magenta); }
+.orbit__more--on { color: var(--ink); border-color: var(--magenta); }
+.orbit__tray {
+  position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+  width: min(280px, 80%); max-height: 220px; overflow-y: auto; z-index: 4;
+  display: flex; flex-direction: column; gap: 4px; padding: 8px;
+  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+  border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(6px);
+}
+.otray__row { display: flex; align-items: center; gap: 6px; }
+.otray__body {
+  flex: 1; text-align: left; cursor: pointer; background: none; border: none; padding: 4px 6px; border-radius: 5px;
+}
+.otray__body:hover:not(:disabled) { background: rgba(255, 61, 154, 0.1); }
+.otray__body:disabled { cursor: default; }
+.otray__label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink); }
+.otray__sub { display: block; font-size: 10px; color: var(--mute); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.otray__row[data-status="failed"] .otray__label { color: var(--danger); }
+.otray__x { background: none; border: none; color: var(--mute); cursor: pointer; font-size: 10px; padding: 3px; }
+.otray__x:hover { color: var(--danger); }
 .ccard {
   position: absolute; z-index: 3;
   animation: ccard-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
