@@ -24,7 +24,8 @@ import type { VaultAdapter } from "../memory/vault-adapter.js";
 import { extractSpokenCore } from "../memory/document-builder.js";
 import { serveHud } from "./static-hud.js";
 import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
-import type { EventBus } from "./event-bus.js";
+import { now, type EventBus } from "./event-bus.js";
+import { installTts, ttsStatus } from "../voice/installer.js";
 
 export class GatewayServer {
   private readonly http: Server;
@@ -129,6 +130,41 @@ export class GatewayServer {
         return;
       }
 
+      // Voice model status (read-only) — proxied to the sidecar. Never throws to
+      // the client: an unreachable sidecar reports not-ready so the HUD degrades.
+      if (req.method === "GET" && url.pathname === "/voice/tts/status") {
+        void ttsStatus(url.searchParams.get("provider") ?? undefined).then(
+          (status) => json(res, status),
+          (e) => json(res, { provider: "", installable: false, ready: false, missing: [], error: String(e) }),
+        );
+        return;
+      }
+
+      // Voice model install — downloads assets in the sidecar. Same CSRF/localhost
+      // gate as /settings; emits notifications the HUD feed renders.
+      if (req.method === "POST" && url.pathname === "/voice/tts/install") {
+        if (!originOk(req.headers.origin)) {
+          return json(res, { ok: false, error: "forbidden origin" }, 403);
+        }
+        this.bus.emit({ type: "notification", at: now(), level: "info", message: "Downloading kokoro-onnx voice models…" });
+        void installTts().then(
+          (status) => {
+            this.bus.emit({
+              type: "notification",
+              at: now(),
+              level: status.ready ? "info" : "error",
+              message: status.ready ? "kokoro-onnx voice models ready." : `Model download incomplete: missing ${status.missing.join(", ")}`,
+            });
+            json(res, status);
+          },
+          (e) => {
+            this.bus.emit({ type: "notification", at: now(), level: "error", message: `Voice model download failed: ${String(e)}` });
+            json(res, { ok: false, error: String(e) }, 503);
+          },
+        );
+        return;
+      }
+
       switch (url.pathname) {
         case "/health":
           return json(res, { status: "ok", clients: this.wss.clients.size });
@@ -144,6 +180,7 @@ export class GatewayServer {
               announce: config.voice.announce,
               stt: config.voice.stt.provider,
               tts: config.voice.tts.provider,
+              voice: config.voice.tts.voice ?? "",
             },
             mail: {
               provider: config.mail.provider,
