@@ -39,6 +39,9 @@ its live state over WebSocket; an optional Python **voice sidecar** adds STT/TTS
   operation: route → find bound skill → run the model cascade → hand to the
   runtime. Also the **freshness guard**: if a skill `produces` a record that's
   still fresh, it serves it instantly instead of re-running (unless `force`).
+  In front of it sits **`dispatch/scheduler.ts`** — a global FIFO queue with a
+  live-editable concurrency limit (`tasks.maxConcurrent`, default 2); queued ops
+  emit `operation.queued` before `operation.started`.
 - **`skills/`** — `skill-loader.ts` validates manifests; `skill-runtime.ts`
   executes a skill (and composite sub-skills), streaming output as events; it
   builds the per-op LLM from the selection and injects it. `native-registry.ts`
@@ -61,8 +64,10 @@ its live state over WebSocket; an optional Python **voice sidecar** adds STT/TTS
 
 1. HUD sends a `ClientCommand` over WS: `route` (free text), `invoke` (deck
    button, deck-gated), or `speak` (read a record aloud).
-2. Dispatcher resolves the skill, runs the freshness guard, then the model
-   cascade, emitting `routing.resolved` / `operation.started`.
+2. The Scheduler queues the command (emitting `operation.queued` when a
+   concurrency slot isn't free), then the Dispatcher resolves the skill, runs
+   the freshness guard and the model cascade, emitting `routing.resolved` /
+   `operation.started`.
 3. SkillRuntime executes — streaming `operation.output`, then
    `operation.completed` (with the produced record as `result`) or
    `operation.failed`.
@@ -71,7 +76,7 @@ its live state over WebSocket; an optional Python **voice sidecar** adds STT/TTS
 
 ## Event & command contracts (`packages/shared/src/events.ts`)
 
-`OsEvent` (gateway → clients): `routing.resolved`, `operation.started`,
+`OsEvent` (gateway → clients): `routing.resolved`, `operation.queued`, `operation.started`,
 `operation.output`, `operation.completed` (carries `result {path,title,type}`),
 `operation.failed`, `notification` (optional `speak:false`), `metric`, `speech`,
 `auth.prompt`, `auth.resolved`.

@@ -48,6 +48,9 @@ stays human-first; provenance lives in frontmatter only.
 | telemetry | `40-telemetry` | Metrics |
 | daily | `01-daily` | Operations |
 | inbox | `02-inbox` | TL;DR · Action items |
+| report | `03-report` | TL;DR · Brief (morning-report) |
+| schedule | `04-schedule` | TL;DR · Agenda (schedule skill) |
+| intel | `05-intel` | TL;DR · Wire (ai-wire) |
 
 `buildResultDocument()` validates the contract and **throws** on a malformed
 record, so nothing half-formed reaches the vault.

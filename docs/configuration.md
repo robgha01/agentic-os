@@ -19,9 +19,14 @@ Secrets are **never** stored in plaintext config, never returned by value over
 
 - Stored in the **OS keychain** via `@napi-rs/keyring` when available, else an
   **AES-256-GCM encrypted file** under a master key with locked-down perms.
+- On the encrypted-file backend the master key sits beside the ciphertext (and
+  `chmod 600` is a no-op on Windows) — it protects against accidental plaintext
+  exposure (logs, commits, backups), not against another process running as you.
+  Prefer the OS-keychain backend where available.
 - The secret backend in use is reported as `secretBackend` on `/config`.
 - Secret keys are whitelisted in `SECRET_KEYS` (`config/config-store.ts`):
-  `anthropic.apiKey`, `openai.apiKey`, `mail.token`, `reddit.clientSecret`.
+  `anthropic.apiKey`, `openai.apiKey`, `mail.token`, `mail.refreshToken`,
+  `x.bearerToken`.
 - Editable non-secret keys are whitelisted in `EDITABLE_KEYS`. `POST /settings`
   and `POST /secrets` drop anything not whitelisted.
 

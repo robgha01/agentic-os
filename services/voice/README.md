@@ -32,6 +32,9 @@ pip install -r requirements.txt
 python server.py            # listens on :7788 by default
 ```
 
+> Dependencies are floor-pinned (`>=`). For a reproducible install, freeze your
+> working set once the sidecar runs: `pip freeze > requirements.lock`.
+
 Then start the gateway in voice mode:
 
 ```bash

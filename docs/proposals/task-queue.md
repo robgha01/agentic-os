@@ -1,7 +1,8 @@
 # Plan: Task Queue + Concurrency Limit (Scheduler)
 
-> Status: **planned, not yet built.** Decisions locked: a single **global** limit,
-> default **2**, live-editable; FIFO queue; HUD shows running/queued.
+> Status: **shipped.** Implemented in `services/gateway/src/dispatch/scheduler.ts`:
+> single global limit (default **2**, live-editable via `tasks.maxConcurrent`), FIFO
+> queue, `operation.queued` events; the HUD vitals widget shows running/queued.
 
 ## Context
 
