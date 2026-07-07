@@ -60,8 +60,10 @@ export class GatewayServer {
       };
 
       // DNS-rebinding defense: the Host header must name this machine.
+      // (The gateway is localhost single-user by design; LAN/hostname access
+      // is intentionally not served.)
       if (!isLocalHostHeader(req.headers.host)) {
-        return json(res, { error: "forbidden host" }, 403);
+        return json(res, { error: "forbidden host — the gateway only serves localhost/127.0.0.1/[::1]" }, 403);
       }
 
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -80,14 +82,27 @@ export class GatewayServer {
       // takes non-secret editable keys; /secrets takes secret keys (encrypted /
       // keychained, never echoed back).
       if (req.method === "POST" && (url.pathname === "/settings" || url.pathname === "/secrets")) {
+        // CSRF gate: a cross-site page can fire a non-preflighted "simple" POST
+        // (e.g. content-type text/plain) that the Host check alone won't stop —
+        // browsers always attach the page's Origin to cross-origin POSTs, so a
+        // non-local Origin is rejected outright. Absent Origin = CLI/same-origin.
+        if (!isLocalOrigin(req.headers.origin)) {
+          return json(res, { ok: false, error: "forbidden origin" }, 403);
+        }
         const wantSecret = url.pathname === "/secrets";
         const MAX_BODY = 64 * 1024;
         let body = "";
+        let tooLarge = false;
         req.on("data", (c) => {
+          if (tooLarge) return;
           body += c;
           if (body.length > MAX_BODY) {
+            tooLarge = true;
+            body = "";
+            // Respond first, then sever once the 413 has flushed — destroying
+            // the socket immediately would reset the connection mid-response.
+            res.once("finish", () => req.destroy());
             json(res, { ok: false, error: "body too large" }, 413);
-            req.destroy();
           }
         });
         req.on("end", () => {

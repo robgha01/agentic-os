@@ -33,21 +33,34 @@ export class SecretTokenStore implements TokenStore {
         return null;
       }
     }
-    // One-time migration from the legacy plaintext file.
+    // One-time migration from the legacy plaintext file. Best-effort: a failed
+    // secret-backend write must not break auth (the legacy token still works),
+    // and the plaintext file is only deleted once the secret copy is readable.
     const migrated = this.legacy?.load() ?? null;
     if (migrated) {
       this.save(migrated);
-      try {
-        this.io.deleteLegacyFile?.();
-      } catch {
-        /* best-effort cleanup */
+      if (this.io.get()) {
+        try {
+          this.io.deleteLegacyFile?.();
+        } catch {
+          /* best-effort cleanup */
+        }
       }
     }
     return migrated;
   }
 
+  /**
+   * Best-effort persist: a keychain write failure (e.g. a credential-size limit)
+   * must not crash the sign-in/refresh flow — the token just isn't persisted and
+   * the user re-authenticates next restart.
+   */
   save(data: TokenStoreData): void {
-    this.io.set(JSON.stringify(data));
+    try {
+      this.io.set(JSON.stringify(data));
+    } catch (err) {
+      console.warn(`[mail] could not persist refresh token to the secret store: ${(err as Error).message}`);
+    }
   }
 }
 

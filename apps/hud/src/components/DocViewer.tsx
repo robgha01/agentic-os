@@ -3,7 +3,7 @@
  * already human-first (no frontmatter noise, no markers, no footer in the body),
  * so this just renders the title, a small properties strip, and the prose.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import type { HudState } from "../useGateway.js";
@@ -29,6 +29,19 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
       alive = false;
     };
   }, [path, fetchDoc]);
+
+  // Memoized: the parent re-renders on every event-stream tick, and
+  // parse+sanitize over a whole record is too heavy to redo each frame.
+  const bodyHtml = useMemo(
+    () =>
+      doc
+        ? DOMPurify.sanitize(
+            // Strip the body's leading H1 — we already render the title above.
+            marked.parse(doc.body.replace(/^\s*#\s+[^\n]*\n+/, "")) as string,
+          )
+        : "",
+    [doc],
+  );
 
   const fm = doc?.frontmatter ?? {};
   const title = String(fm.title ?? path);
@@ -80,14 +93,9 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
             ) : null}
             <div
               className="doc__body"
-              // Strip the body's leading H1 — we already render the title above.
               // Sanitized: vault bodies contain LLM-synthesized text from scraped
               // web sources, so raw HTML must never reach the DOM.
-              dangerouslySetInnerHTML={{
-                __html: DOMPurify.sanitize(
-                  marked.parse(doc.body.replace(/^\s*#\s+[^\n]*\n+/, "")) as string,
-                ),
-              }}
+              dangerouslySetInnerHTML={{ __html: bodyHtml }}
             />
           </article>
         )}

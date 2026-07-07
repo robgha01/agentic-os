@@ -49,4 +49,30 @@ describe("SecretTokenStore", () => {
   it("returns null when nothing is stored anywhere", () => {
     expect(new SecretTokenStore(legacyWith(null), fakeIo().io).load()).toBeNull();
   });
+
+  it("still serves the legacy token (and keeps the file) when the secret write fails", () => {
+    let legacyDeleted = false;
+    const io = {
+      get: () => undefined,
+      set: () => {
+        throw new Error("keychain blob too large");
+      },
+      deleteLegacyFile: () => {
+        legacyDeleted = true;
+      },
+    };
+    const store = new SecretTokenStore(legacyWith(data), io);
+    expect(store.load()).toEqual(data); // auth keeps working off the legacy file
+    expect(legacyDeleted).toBe(false); // the only working copy is preserved
+  });
+
+  it("save never throws on a secret-backend failure", () => {
+    const store = new SecretTokenStore(undefined, {
+      get: () => undefined,
+      set: () => {
+        throw new Error("nope");
+      },
+    });
+    expect(() => store.save(data)).not.toThrow();
+  });
 });

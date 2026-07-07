@@ -75,20 +75,23 @@ export type ClientCommand =
 
 // --- Runtime validation (the wire is untrusted on both ends) -----------------
 
-const RoutedIntentSchema: z.ZodType<RoutedIntent> = z.object({
+// `source`/`provider` are open strings on the wire (not closed enums) so a HUD
+// bundle keeps rendering events from a newer gateway that added a route source
+// or provider id; consumers treat them as display strings only.
+const RoutedIntentSchema = z.object({
   actionId: z.string(),
-  source: z.enum(["regex", "semantic", "direct"]),
+  source: z.string(),
   confidence: z.number(),
   parameters: z.record(z.unknown()),
   rawInput: z.string(),
   reasoning: z.string().optional(),
-});
+}) as unknown as z.ZodType<RoutedIntent>;
 
-const ModelSelectionSchema: z.ZodType<ModelSelection> = z.object({
-  provider: z.enum(["haiku", "ollama", "openai", "claude-code"]),
+const ModelSelectionSchema = z.object({
+  provider: z.string(),
   model: z.string(),
   reason: z.string(),
-});
+}) as unknown as z.ZodType<ModelSelection>;
 
 const OperationResultSchema: z.ZodType<OperationResult> = z.object({
   path: z.string(),

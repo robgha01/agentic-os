@@ -37,4 +37,11 @@ describe("parseOsEvent", () => {
   it("rejects junk", () => {
     expect(parseOsEvent(42)).toBeNull();
   });
+  it("tolerates provider ids it doesn't know (forward compatibility)", () => {
+    const e = {
+      type: "operation.started", at: "2026-07-07T10:00:00Z",
+      op: { opId: "1", actionId: "a", skillId: null, selection: { provider: "some-future-provider", model: "m", reason: "r" } },
+    };
+    expect(parseOsEvent(e)).toEqual(e);
+  });
 });

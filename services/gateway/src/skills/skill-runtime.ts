@@ -127,8 +127,12 @@ export class SkillRuntime {
     }
   }
 
-  /** Skills may run long (a headless ship-ticket implements a whole change). */
-  private static readonly DEFAULT_SKILL_TIMEOUT_MS = 15 * 60_000;
+  /**
+   * Skills may run long (a headless ship-ticket implements a whole change), so
+   * the hang-protection default is generous; a manifest sets `timeoutMs` to
+   * tighten or extend it per skill.
+   */
+  private static readonly DEFAULT_SKILL_TIMEOUT_MS = 60 * 60_000;
 
   /** Spawn a child, stream its stdio to the bus, resolve with a StepResult. */
   private async spawnCollect(
@@ -142,6 +146,8 @@ export class SkillRuntime {
       shell: opts.shell,
       timeoutMs: opts.timeoutMs ?? SkillRuntime.DEFAULT_SKILL_TIMEOUT_MS,
       onOutput: (stream, chunk) => this.output(opId, stream, chunk),
+      // Output is streamed to the bus; don't also buffer it for the whole run.
+      capture: false,
     });
     if (r.spawnError) return { ok: false, exitCode: null, error: `failed to spawn "${command}": ${r.spawnError}` };
     if (r.timedOut) return { ok: false, exitCode: null, error: `"${command}" timed out and was killed` };

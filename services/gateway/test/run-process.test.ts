@@ -27,6 +27,16 @@ describe("runProcess", () => {
     expect(r.spawnError).toBeTruthy();
   });
 
+  it("skips accumulation with capture:false but still streams", async () => {
+    const chunks: string[] = [];
+    const r = await runProcess(NODE, ["-e", "console.log('streamed')"], {
+      capture: false,
+      onOutput: (_s, c) => chunks.push(c),
+    });
+    expect(r.stdout).toBe("");
+    expect(chunks.join("")).toContain("streamed");
+  });
+
   it("pipes stdin and streams output chunks", async () => {
     const chunks: string[] = [];
     const r = await runProcess(NODE, ["-e", "process.stdin.pipe(process.stdout)"], {

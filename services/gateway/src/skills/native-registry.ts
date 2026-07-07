@@ -106,7 +106,9 @@ async function runFetcher(
     fetchItems: () => Promise<ResearchItem[]>;
   },
 ): Promise<number> {
-  if (sourceDisabled(opts.id)) return 0;
+  // The research-source toggles gate the research pipeline only; a skill that
+  // reuses fetchers as its own data source (ai-wire) opts out via the context.
+  if (ctx.context.bypassSourceToggles !== true && sourceDisabled(opts.id)) return 0;
   try {
     const items = await opts.fetchItems();
     collect(ctx, items, { label: opts.label, url: opts.humanUrl });
@@ -374,7 +376,6 @@ const fetchYouTube: NativeHandler = async (ctx) => {
 const fetchX: NativeHandler = async (ctx) => {
   const topic = String(ctx.params.topic ?? "").trim();
   if (!topic) return 0;
-  if (sourceDisabled("x")) return 0;
   const token = config.x.bearerToken;
   if (!token) {
     ctx.emit("fetch-x: no X bearer token configured (set x.bearerToken); skipping\n");
@@ -610,9 +611,12 @@ const aiWire: NativeHandler = async (ctx) => {
   const topic = String(ctx.params.topic ?? "").trim() || AI_WIRE_TOPIC;
   ctx.params.topic = topic; // the fetch handlers read params.topic
 
-  // Reuse the keyless fetchers to populate ctx.context.researchItems.
+  // Reuse the keyless fetchers to populate ctx.context.researchItems. HN/Reddit
+  // are ai-wire's data source by design, so the research toggles don't apply.
+  ctx.context.bypassSourceToggles = true;
   await fetchHackerNews(ctx);
   await fetchReddit(ctx);
+  delete ctx.context.bypassSourceToggles;
 
   const items = (ctx.context.researchItems as ResearchItem[] | undefined) ?? [];
   const ranked = dedupeRank(items, 25);
