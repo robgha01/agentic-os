@@ -16,6 +16,7 @@ import {
   type SidecarActionResult,
   type SidecarHealth,
   type TtsStatus,
+  type VoiceEnv,
   type VaultDoc,
   type VaultSummary,
 } from "./gateway.js";
@@ -93,6 +94,7 @@ export interface HudState {
   getMisakiStatus: () => Promise<MisakiStatus>;
   installMisaki: () => Promise<MisakiStatus>;
   getSidecarHealth: () => Promise<SidecarHealth>;
+  getVoiceEnv: () => Promise<VoiceEnv>;
   startSidecar: () => Promise<SidecarActionResult>;
   stopSidecar: () => Promise<SidecarActionResult>;
 }
@@ -347,6 +349,10 @@ export function useGateway(): HudState {
     () => clientRef.current?.getSidecarHealth() ?? Promise.reject(new Error("not connected")),
     [],
   );
+  const getVoiceEnv = useCallback(
+    () => clientRef.current?.getVoiceEnv() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
   const startSidecar = useCallback(
     () => clientRef.current?.startSidecar() ?? Promise.reject(new Error("not connected")),
     [],
@@ -396,6 +402,7 @@ export function useGateway(): HudState {
     getMisakiStatus,
     installMisaki,
     getSidecarHealth,
+    getVoiceEnv,
     startSidecar,
     stopSidecar,
   };

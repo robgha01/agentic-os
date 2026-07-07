@@ -257,6 +257,7 @@ export class GatewayServer {
               stt: config.voice.stt.provider,
               tts: config.voice.tts.provider,
               voice: config.voice.tts.voice ?? "",
+              python: config.voice.pythonPath ?? "",
             },
             mail: {
               provider: config.mail.provider,

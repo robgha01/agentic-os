@@ -72,9 +72,18 @@ export interface SidecarActionResult {
   error?: string;
 }
 
+/** Detected Python environment for the sidecar (interpreter + tooling). */
+export interface VoiceEnv {
+  python: string | null;
+  source: "config" | "venv" | "path" | "none";
+  version: string | null;
+  uv: boolean;
+  venv: boolean;
+}
+
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
-  voice: { mode: string; announce: boolean; stt: string; tts: string; voice: string };
+  voice: { mode: string; announce: boolean; stt: string; tts: string; voice: string; python: string };
   mail: { provider: string; tokenSource: string; signedIn: boolean };
   research: { sources: { id: string; label: string; auth: string; enabled: boolean }[] };
   providers: ProviderStatus[];
@@ -200,6 +209,11 @@ export class GatewayClient {
   async getSidecarHealth(): Promise<SidecarHealth> {
     const res = await fetch(`${HTTP_BASE}/voice/health`);
     return (await res.json()) as SidecarHealth;
+  }
+
+  async getVoiceEnv(): Promise<VoiceEnv> {
+    const res = await fetch(`${HTTP_BASE}/voice/env`);
+    return (await res.json()) as VoiceEnv;
   }
 
   async startSidecar(): Promise<SidecarActionResult> {

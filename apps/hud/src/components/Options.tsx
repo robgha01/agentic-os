@@ -191,6 +191,7 @@ export function Options({ hud }: { hud: HudState }) {
         ttsValue={valueOf("voice.tts.provider", cfg.voice.tts)}
         voiceValue={valueOf("voice.tts.voice", cfg.voice.voice)}
         sttValue={valueOf("voice.stt.provider", cfg.voice.stt)}
+        pythonPathValue={valueOf("voice.pythonPath", cfg.voice.python ?? "")}
         hud={hud}
       />
 
