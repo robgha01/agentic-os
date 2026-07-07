@@ -66,6 +66,11 @@ export function voiceSetupPackages(c: VoiceEngineChoice): string[] {
   return out;
 }
 
-export function voiceSetupCommand(c: VoiceEngineChoice): string {
-  return `pip install ${voiceSetupPackages(c).join(" ")}`;
+export type VoiceInstallTool = "pip" | "uv";
+
+/** The install command for a choice, using pip (default) or uv (`uv pip install`).
+ *  The package set is identical — only the front-end tool differs. */
+export function voiceSetupCommand(c: VoiceEngineChoice, tool: VoiceInstallTool = "pip"): string {
+  const pkgs = voiceSetupPackages(c).join(" ");
+  return tool === "uv" ? `uv pip install ${pkgs}` : `pip install ${pkgs}`;
 }

@@ -5,9 +5,8 @@
  * stop only kills a child WE spawned — an externally-run sidecar is left alone.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { sidecarHealth } from "./installer.js";
+import { resolvePython, useShell, voiceDir } from "./env.js";
 
 export interface SidecarActionResult {
   online: boolean;
@@ -15,18 +14,6 @@ export interface SidecarActionResult {
   stopped?: boolean;
   note?: string;
   error?: string;
-}
-
-const voiceDir = () => fileURLToPath(new URL("../../../../services/voice/", import.meta.url));
-
-/** The venv python if the user created one, else null (they must set it up first). */
-export function sidecarPython(): string | null {
-  const dir = voiceDir();
-  const candidates =
-    process.platform === "win32"
-      ? [`${dir}.venv\\Scripts\\python.exe`, `${dir}venv\\Scripts\\python.exe`]
-      : [`${dir}.venv/bin/python`, `${dir}venv/bin/python`];
-  return candidates.find((p) => existsSync(p)) ?? null;
 }
 
 let child: ChildProcess | null = null;
@@ -42,10 +29,19 @@ async function waitOnline(timeoutMs: number): Promise<boolean> {
 
 export async function startSidecar(): Promise<SidecarActionResult> {
   if ((await sidecarHealth()).online) return { online: true, started: false, note: "already running" };
-  const py = sidecarPython();
-  if (!py) return { online: false, error: "no venv found in services/voice — run the setup command first" };
+  const { python } = resolvePython();
+  if (!python) {
+    return { online: false, error: "no Python found — set voice.pythonPath (pyenv/uv/conda) or create a venv in services/voice" };
+  }
   try {
-    child = spawn(py, ["server.py"], { cwd: voiceDir(), stdio: "ignore", shell: false });
+    // Pass our PID so the sidecar's watchdog self-exits if the gateway dies
+    // ungracefully (SIGKILL/crash), closing the orphan gap the shutdown hook can't.
+    child = spawn(python, ["server.py"], {
+      cwd: voiceDir(),
+      stdio: "ignore",
+      shell: useShell(python),
+      env: { ...process.env, AGENTIC_OS_PARENT_PID: String(process.pid) },
+    });
     child.on("exit", () => {
       child = null;
     });

@@ -90,6 +90,8 @@ export interface AgenticOsConfig {
     stt: { provider: string; model?: string; apiKeyEnv?: string };
     tts: { provider: string; voice?: string; apiKeyEnv?: string };
     sidecarUrl: string;
+    /** Python interpreter for the sidecar (pyenv/uv/conda/system). Empty = auto-detect. */
+    pythonPath?: string;
   };
   mail: {
     provider: "none" | "outlook" | "gmail" | "imap";
@@ -208,6 +210,7 @@ function build(): AgenticOsConfig {
       apiKeyEnv: cfgOpt("voice.tts.apiKeyEnv", "AGENTIC_OS_TTS_API_KEY_ENV"),
     },
     sidecarUrl: cfg("voice.sidecarUrl", "AGENTIC_OS_VOICE_SIDECAR_URL", `http://localhost:${voicePort}`),
+    pythonPath: cfgOpt("voice.pythonPath", "AGENTIC_OS_VOICE_PYTHON"),
   },
   mail: {
     provider: oneOf(

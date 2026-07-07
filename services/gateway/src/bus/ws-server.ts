@@ -27,6 +27,7 @@ import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
 import { now, type EventBus } from "./event-bus.js";
 import { installMisaki, installTts, misakiStatus, sidecarHealth, ttsStatus } from "../voice/installer.js";
 import { startSidecar, stopSidecar } from "../voice/sidecar.js";
+import { detectEnv } from "../voice/env.js";
 
 export class GatewayServer {
   private readonly http: Server;
@@ -135,6 +136,15 @@ export class GatewayServer {
       if (req.method === "GET" && url.pathname === "/voice/health") {
         void sidecarHealth().then((h) => json(res, h), () => json(res, { online: false }));
         return;
+      }
+
+      // Detected Python environment (interpreter, uv availability) for the setup panel.
+      if (req.method === "GET" && url.pathname === "/voice/env") {
+        try {
+          return json(res, detectEnv());
+        } catch (e) {
+          return json(res, { python: null, source: "none", version: null, uv: false, venv: false, error: String(e) });
+        }
       }
 
       // Voice model status (read-only) — proxied to the sidecar. Never throws to

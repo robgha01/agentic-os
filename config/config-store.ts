@@ -40,6 +40,7 @@ export const EDITABLE_KEYS = [
   "voice.tts.provider",
   "voice.tts.voice",
   "voice.stt.provider",
+  "voice.pythonPath",
   "mail.provider",
   "mail.tokenSource",
   "openai.baseUrl",

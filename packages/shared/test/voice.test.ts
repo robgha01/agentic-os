@@ -42,4 +42,10 @@ describe("voice setup command", () => {
     expect(cmd.startsWith("pip install ")).toBe(true);
     expect(cmd.match(/\bopenai\b/g)?.length).toBe(1); // deduped across TTS+STT
   });
+  it("uv tool → `uv pip install` with the same packages", () => {
+    const choice = { tts: "kokoro-onnx", stt: "none" } as const;
+    const uv = voiceSetupCommand(choice, "uv");
+    expect(uv.startsWith("uv pip install ")).toBe(true);
+    expect(uv.replace("uv pip install ", "")).toBe(voiceSetupCommand(choice).replace("pip install ", ""));
+  });
 });
