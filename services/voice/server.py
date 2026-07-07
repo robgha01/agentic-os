@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import config
+import deps
 import stt as stt_mod
 import tts as tts_mod
 
@@ -90,6 +91,19 @@ def synthesize(req: TtsRequest) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     name = os.path.basename(path)
     return {"audioUrl": f"http://{cfg.host}:{cfg.port}/audio/{name}"}
+
+
+@app.get("/deps/misaki/status")
+def misaki_status() -> dict:
+    return {"dep": "misaki", "installed": deps.misaki_installed()}
+
+
+@app.post("/deps/misaki/install")
+def misaki_install() -> dict:
+    try:
+        return deps.install_misaki()
+    except Exception as exc:  # pip/network/timeout — surface to the caller
+        raise HTTPException(status_code=503, detail=f"misaki install failed: {exc}") from exc
 
 
 @app.get("/audio/{name}")

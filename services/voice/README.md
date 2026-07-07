@@ -29,11 +29,13 @@ Same Kokoro voices as the default `kokoro`, but run through ONNX Runtime — no
 torch dependency, lighter and faster on CPU. Unlike `kokoro`, it does **not**
 auto-download its weights, so do it once:
 
-1. `pip install kokoro-onnx 'misaki-fork[en]'` (uncomment both in
-   `requirements.txt`). `misaki` is kokoro-onnx's recommended G2P for the v1.0
-   models — better pronunciation than the built-in phonemizer. It's optional: the
-   provider falls back to the built-in tokenizer if misaki (or its espeak-ng
-   dependency) isn't installed.
+1. `pip install kokoro-onnx` (uncomment it in `requirements.txt`).
+   `misaki` — kokoro-onnx's recommended G2P for the v1.0 models (better
+   pronunciation than the built-in phonemizer) — is **optional**. Install it
+   either from the HUD (Options → Voice → kokoro-onnx → **Install misaki**, which
+   pip-installs into this sidecar's venv; needs the sidecar running) or by hand
+   with `pip install 'misaki-fork[en]'`. If it (or its espeak-ng dependency) is
+   absent, the provider falls back to the built-in tokenizer.
 2. Get the model files, either way:
    - **In the HUD**: Options → Voice → pick **kokoro-onnx** → click **Download
      models (~330 MB)**. The button appears whenever the files are missing.

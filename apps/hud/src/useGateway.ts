@@ -12,6 +12,7 @@ import {
   GatewayClient,
   type ConfigView,
   type ConnectionStatus,
+  type MisakiStatus,
   type TtsStatus,
   type VaultDoc,
   type VaultSummary,
@@ -87,6 +88,8 @@ export interface HudState {
   saveSecret: (key: string, value: string) => Promise<void>;
   getTtsStatus: (provider: string) => Promise<TtsStatus>;
   installTts: () => Promise<TtsStatus>;
+  getMisakiStatus: () => Promise<MisakiStatus>;
+  installMisaki: () => Promise<MisakiStatus>;
 }
 
 const MAX_OPS = 60;
@@ -327,6 +330,14 @@ export function useGateway(): HudState {
     () => clientRef.current?.installTts() ?? Promise.reject(new Error("not connected")),
     [],
   );
+  const getMisakiStatus = useCallback(
+    () => clientRef.current?.getMisakiStatus() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
+  const installMisaki = useCallback(
+    () => clientRef.current?.installMisaki() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
 
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
@@ -365,5 +376,7 @@ export function useGateway(): HudState {
     saveSecret,
     getTtsStatus,
     installTts,
+    getMisakiStatus,
+    installMisaki,
   };
 }

@@ -630,6 +630,12 @@ a { color: var(--magenta); }
 }
 .opt__btn:hover { background: color-mix(in srgb, var(--magenta) 28%, transparent); }
 .opt__btn[disabled] { opacity: 0.6; cursor: progress; }
+.opt__linkbtn {
+  background: none; border: none; padding: 0; margin: 0;
+  color: var(--magenta); font: inherit; cursor: pointer; text-decoration: underline;
+}
+.opt__linkbtn:hover { color: var(--ink); }
+.opt__cmd { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-left: 8px; }
 
 /* ---- Auth overlay ---- */
 .overlay {

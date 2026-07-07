@@ -50,6 +50,12 @@ export interface TtsStatus {
   error?: string;
 }
 
+/** Whether the optional misaki G2P is installed in the sidecar's Python env. */
+export interface MisakiStatus {
+  installed: boolean;
+  error?: string;
+}
+
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
   voice: { mode: string; announce: boolean; stt: string; tts: string; voice: string };
@@ -173,6 +179,20 @@ export class GatewayClient {
       body: "{}",
     });
     return (await res.json()) as TtsStatus;
+  }
+
+  async getMisakiStatus(): Promise<MisakiStatus> {
+    const res = await fetch(`${HTTP_BASE}/voice/misaki/status`);
+    return (await res.json()) as MisakiStatus;
+  }
+
+  async installMisaki(): Promise<MisakiStatus> {
+    const res = await fetch(`${HTTP_BASE}/voice/misaki/install`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    return (await res.json()) as MisakiStatus;
   }
 
   dispose(): void {

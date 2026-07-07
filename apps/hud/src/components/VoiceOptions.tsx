@@ -7,8 +7,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { TTS_PROVIDER_IDS, ttsProvider } from "@aos/shared";
 import type { HudState } from "../useGateway.js";
-import type { TtsStatus } from "../gateway.js";
+import type { MisakiStatus, TtsStatus } from "../gateway.js";
 import { Select, Text } from "./opt-controls.js";
+
+const MISAKI_CMD = "pip install 'misaki-fork[en]'";
 
 type Bind = (k: string, running: string) => { value: string; onChange: (v: string) => void };
 
@@ -23,13 +25,18 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, hud }
   const cap = ttsProvider(ttsValue);
   const [status, setStatus] = useState<TtsStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [misaki, setMisaki] = useState<MisakiStatus | null>(null);
+  const [misakiBusy, setMisakiBusy] = useState(false);
+  const [manual, setManual] = useState(false);
 
   const refresh = useCallback(() => {
     if (!cap?.installable) {
       setStatus(null);
+      setMisaki(null);
       return;
     }
     hud.getTtsStatus(ttsValue).then(setStatus).catch(() => setStatus(null));
+    hud.getMisakiStatus().then(setMisaki).catch(() => setMisaki(null));
   }, [cap?.installable, ttsValue, hud]);
   useEffect(refresh, [refresh]);
 
@@ -41,6 +48,17 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, hud }
       /* the gateway emits an error notification; leave status as-is */
     } finally {
       setBusy(false);
+    }
+  };
+
+  const installMisakiDep = async () => {
+    setMisakiBusy(true);
+    try {
+      setMisaki(await hud.installMisaki());
+    } catch {
+      /* gateway emits an error notification */
+    } finally {
+      setMisakiBusy(false);
     }
   };
 
@@ -86,6 +104,44 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, hud }
                 </button>
               ) : null}
             </div>
+          ) : null}
+
+          {cap.installable ? (
+            <>
+              <div className="opt__row">
+                <span className="opt__key">
+                  misaki G2P
+                  <span className={`opt__chip ${misaki?.installed ? "opt__chip--on" : ""}`}>
+                    {misaki == null ? "…" : misaki.error ? "sidecar offline" : misaki.installed ? "installed ✓" : "not installed"}
+                  </span>
+                  <span className="opt__sub">recommended for v1.0 — better pronunciation (optional)</span>
+                </span>
+                {misaki && !misaki.installed && !misaki.error ? (
+                  <button className="opt__btn" disabled={misakiBusy} onClick={installMisakiDep}>
+                    {misakiBusy ? "Installing…" : "Install misaki"}
+                  </button>
+                ) : null}
+              </div>
+              {misaki && !misaki.installed ? (
+                <p className="opt__hint">
+                  <button className="opt__linkbtn" onClick={() => setManual((v) => !v)}>
+                    {manual ? "hide manual install" : "install manually instead"}
+                  </button>
+                  {misaki.error ? " — the sidecar must be running for the button." : null}
+                  {manual ? (
+                    <span className="opt__cmd">
+                      run in the sidecar's venv: <code>{MISAKI_CMD}</code>
+                      <button
+                        className="opt__linkbtn"
+                        onClick={() => void navigator.clipboard?.writeText(MISAKI_CMD)}
+                      >
+                        copy
+                      </button>
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
+            </>
           ) : null}
         </>
       ) : null}

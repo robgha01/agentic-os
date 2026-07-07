@@ -25,7 +25,7 @@ import { extractSpokenCore } from "../memory/document-builder.js";
 import { serveHud } from "./static-hud.js";
 import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
 import { now, type EventBus } from "./event-bus.js";
-import { installTts, ttsStatus } from "../voice/installer.js";
+import { installMisaki, installTts, misakiStatus, ttsStatus } from "../voice/installer.js";
 
 export class GatewayServer {
   private readonly http: Server;
@@ -159,6 +159,40 @@ export class GatewayServer {
           },
           (e) => {
             this.bus.emit({ type: "notification", at: now(), level: "error", message: `Voice model download failed: ${String(e)}` });
+            json(res, { ok: false, error: String(e) }, 503);
+          },
+        );
+        return;
+      }
+
+      // misaki G2P dependency status (read-only) — proxied to the sidecar, which
+      // owns its own Python env. Never throws to the client.
+      if (req.method === "GET" && url.pathname === "/voice/misaki/status") {
+        void misakiStatus().then(
+          (status) => json(res, status),
+          (e) => json(res, { installed: false, error: String(e) }),
+        );
+        return;
+      }
+
+      // misaki install — pip runs in the sidecar's venv. Same CSRF/localhost gate.
+      if (req.method === "POST" && url.pathname === "/voice/misaki/install") {
+        if (!originOk(req.headers.origin)) {
+          return json(res, { ok: false, error: "forbidden origin" }, 403);
+        }
+        this.bus.emit({ type: "notification", at: now(), level: "info", message: "Installing misaki G2P in the voice sidecar…" });
+        void installMisaki().then(
+          (status) => {
+            this.bus.emit({
+              type: "notification",
+              at: now(),
+              level: status.installed ? "info" : "error",
+              message: status.installed ? "misaki G2P installed (restart the sidecar to use it)." : "misaki install ran but the package isn't importable — check the sidecar log.",
+            });
+            json(res, status);
+          },
+          (e) => {
+            this.bus.emit({ type: "notification", at: now(), level: "error", message: `misaki install failed: ${String(e)}` });
             json(res, { ok: false, error: String(e) }, 503);
           },
         );
