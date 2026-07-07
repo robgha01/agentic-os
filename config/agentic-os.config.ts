@@ -10,6 +10,7 @@
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ROUTER_PROVIDER_IDS, type RouterProviderId } from "@aos/shared";
 import { getValue, DATA_DIR } from "./config-store.js";
 
 // Repo root resolved from this file's location (<root>/config/agentic-os.config.ts).
@@ -39,7 +40,7 @@ function oneOf<T extends string>(value: string, allowed: readonly T[], fallback:
 
 export interface AgenticOsConfig {
   router: {
-    defaultProvider: "haiku" | "ollama" | "openai";
+    defaultProvider: RouterProviderId;
     transport: "sdk" | "headless";
     minConfidence: number;
   };
@@ -69,6 +70,13 @@ export interface AgenticOsConfig {
   budgets: { defaultMaxLatencyMs: number; defaultMaxCostUsd: number };
   /** Task scheduler: how many operations may run at once; the rest queue (FIFO). */
   tasks: { maxConcurrent: number };
+  /**
+   * Control-plane exposure. By default the gateway is localhost-only: it rejects
+   * non-local Host headers (DNS-rebinding defense) and non-local Origins (CSRF
+   * defense). Set `allowRemoteAccess` to reach the HUD from another device / the
+   * machine name — this drops those guards, so only enable it on a trusted LAN.
+   */
+  security: { allowRemoteAccess: boolean };
   /**
    * How the packaged app opens its window. `launch`: app = a chromeless Chromium
    * (--app) window · browser = your default browser tab · none = don't open.
@@ -111,7 +119,7 @@ function build(): AgenticOsConfig {
   router: {
     defaultProvider: oneOf(
       cfg("router.defaultProvider", "AGENTIC_OS_ROUTER", "haiku"),
-      ["haiku", "ollama", "openai"],
+      ROUTER_PROVIDER_IDS,
       "haiku",
     ),
     transport: oneOf(cfg("router.transport", "AGENTIC_OS_ROUTER_TRANSPORT", "sdk"), ["sdk", "headless"], "sdk"),
@@ -172,6 +180,10 @@ function build(): AgenticOsConfig {
   },
   tasks: {
     maxConcurrent: Math.max(1, cfgNum("tasks.maxConcurrent", "AGENTIC_OS_MAX_CONCURRENT", 2)),
+  },
+  security: {
+    allowRemoteAccess:
+      cfg("security.allowRemoteAccess", "AGENTIC_OS_ALLOW_REMOTE", "false") === "true",
   },
   ui: {
     // Auto-open only when running as the packaged binary; quiet in dev.

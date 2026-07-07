@@ -8,7 +8,7 @@
  * The semantic brain is constructed from runtime availability so the engine
  * degrades gracefully: Haiku by default, Ollama when offline or forced.
  */
-import type { Action, ModelRuntimeContext, RoutedIntent } from "@aos/shared";
+import { ROUTER_PROVIDER_IDS, type Action, type ModelRuntimeContext, type RouterProviderId, type RoutedIntent } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
 import { ACTION_REGISTRY } from "../actions/registry.js";
 import { ROUTES, type RouteRule } from "./routes.config.js";
@@ -74,7 +74,7 @@ export function selectRouterProvider(runtime: ModelRuntimeContext): RouterProvid
   const headless = config.router.transport === "headless";
   const haikuReady = runtime.networkUp && (headless || runtime.anthropicKeyPresent);
 
-  const build: Record<"haiku" | "ollama" | "openai", () => RouterProvider> = {
+  const build: Record<RouterProviderId, () => RouterProvider> = {
     haiku: () =>
       headless
         ? new ClaudeHeadlessProvider(config.anthropic.routerModel, { id: "haiku", bin: config.claudeCode.bin })
@@ -82,8 +82,8 @@ export function selectRouterProvider(runtime: ModelRuntimeContext): RouterProvid
     ollama: () => new OllamaProvider(config.ollama.baseUrl, config.ollama.model),
     openai: () => new OpenAiProvider(config.openai.baseUrl, config.openai.model, config.openai.apiKey),
   };
-  const off = (id: "haiku" | "ollama" | "openai") => runtime.disabled.includes(id);
-  const ready: Record<"haiku" | "ollama" | "openai", boolean> = {
+  const off = (id: RouterProviderId) => runtime.disabled.includes(id);
+  const ready: Record<RouterProviderId, boolean> = {
     haiku: haikuReady && !off("haiku"),
     ollama: runtime.ollamaReachable && !off("ollama"),
     openai: runtime.networkUp && runtime.openaiConfigured && !off("openai"),
@@ -91,7 +91,7 @@ export function selectRouterProvider(runtime: ModelRuntimeContext): RouterProvid
 
   // Prefer the configured brain; if it isn't ready, fall to the first that is.
   const preferred = config.router.defaultProvider;
-  const order: ("haiku" | "ollama" | "openai")[] = [preferred, "haiku", "ollama", "openai"];
+  const order: RouterProviderId[] = [preferred, ...ROUTER_PROVIDER_IDS];
   for (const id of order) {
     if (ready[id]) return build[id]();
   }

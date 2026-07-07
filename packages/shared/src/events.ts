@@ -75,9 +75,10 @@ export type ClientCommand =
 
 // --- Runtime validation (the wire is untrusted on both ends) -----------------
 
-// `source`/`provider` are open strings on the wire (not closed enums) so a HUD
-// bundle keeps rendering events from a newer gateway that added a route source
-// or provider id; consumers treat them as display strings only.
+// `source` (ROUTE_SOURCES) and `provider` (PROVIDER_IDS) are the canonical sets,
+// but on the wire they stay permissive strings so a HUD bundle keeps rendering
+// events from a newer gateway that added a route source or provider id — the HUD
+// treats them as display/provenance strings only, never branching on them.
 const RoutedIntentSchema = z.object({
   actionId: z.string(),
   source: z.string(),

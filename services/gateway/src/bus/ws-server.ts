@@ -43,11 +43,15 @@ export class GatewayServer {
     private readonly providers?: () => import("@aos/shared").ProviderReadiness[],
     private readonly scheduler?: import("../dispatch/scheduler.js").Scheduler,
   ) {
-    // Localhost single-user tool: only LOCAL origins may read cross-origin
-    // (the HUD dev server on :5173). Anything else gets no CORS grant.
+    // Localhost single-user tool by default: only LOCAL origins may read
+    // cross-origin (the HUD dev server on :5173). Anything else gets no CORS
+    // grant — unless the user opts into remote access (trusted-LAN), which
+    // reflects any origin. Read live so an Options toggle applies without restart.
+    const allowRemote = () => config.security.allowRemoteAccess;
+    const originOk = (origin: string | undefined) => allowRemote() || isLocalOrigin(origin);
     const corsFor = (req: import("node:http").IncomingMessage): Record<string, string> => {
       const origin = req.headers.origin;
-      return origin && isLocalOrigin(origin)
+      return origin && originOk(origin)
         ? { "access-control-allow-origin": origin, vary: "origin" }
         : {};
     };
@@ -59,11 +63,10 @@ export class GatewayServer {
         res2.end(JSON.stringify(body));
       };
 
-      // DNS-rebinding defense: the Host header must name this machine.
-      // (The gateway is localhost single-user by design; LAN/hostname access
-      // is intentionally not served.)
-      if (!isLocalHostHeader(req.headers.host)) {
-        return json(res, { error: "forbidden host — the gateway only serves localhost/127.0.0.1/[::1]" }, 403);
+      // DNS-rebinding defense: the Host header must name this machine, unless the
+      // user has opted into remote access (LAN/hostname).
+      if (!allowRemote() && !isLocalHostHeader(req.headers.host)) {
+        return json(res, { error: "forbidden host — the gateway serves localhost only (enable security.allowRemoteAccess for LAN access)" }, 403);
       }
 
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -86,7 +89,8 @@ export class GatewayServer {
         // (e.g. content-type text/plain) that the Host check alone won't stop —
         // browsers always attach the page's Origin to cross-origin POSTs, so a
         // non-local Origin is rejected outright. Absent Origin = CLI/same-origin.
-        if (!isLocalOrigin(req.headers.origin)) {
+        // (Remote-access mode relaxes this to any origin — trusted-LAN only.)
+        if (!originOk(req.headers.origin)) {
           return json(res, { ok: false, error: "forbidden origin" }, 403);
         }
         const wantSecret = url.pathname === "/secrets";
@@ -162,6 +166,7 @@ export class GatewayServer {
             providers: this.providers?.() ?? [],
             models: { fallbackOrder: config.models.fallbackOrder, disabled: config.models.disabled },
             tasks: { maxConcurrent: config.tasks.maxConcurrent },
+            security: { allowRemoteAccess: config.security.allowRemoteAccess },
             ui: { launch: config.ui.launch, browser: config.ui.browser },
             openai: { baseUrl: config.openai.baseUrl, model: config.openai.model },
             ollama: { baseUrl: config.ollama.baseUrl, model: config.ollama.model },
@@ -195,8 +200,8 @@ export class GatewayServer {
     this.wss = new WebSocketServer({
       server: this.http,
       // Reject browser connections from non-local pages; non-browser clients
-      // (no Origin header) are allowed.
-      verifyClient: (info: { origin?: string }) => isLocalOrigin(info.origin || undefined),
+      // (no Origin header) are allowed. Remote-access mode relaxes this (LAN).
+      verifyClient: (info: { origin?: string }) => originOk(info.origin || undefined),
     });
   }
 

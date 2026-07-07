@@ -97,12 +97,15 @@ its live state over WebSocket; an optional Python **voice sidecar** adds STT/TTS
 
 ## Local-only control plane
 
-The gateway is a **localhost single-user** tool: requests whose `Host` header
-isn't `localhost`/`127.0.0.1`/`[::1]` get a 403 (DNS-rebinding defense), WS
-upgrades and `POST /settings`/`/secrets` require a local (or absent) `Origin`
-(CSRF defense), and CORS grants are only reflected to local origins. Accessing
-the HUD from another device or via the machine name is intentionally not
-supported.
+The gateway is a **localhost single-user** tool by default: requests whose
+`Host` header isn't `localhost`/`127.0.0.1`/`[::1]` get a 403 (DNS-rebinding
+defense), WS upgrades and `POST /settings`/`/secrets` require a local (or absent)
+`Origin` (CSRF defense), and CORS grants are only reflected to local origins.
+
+Set **`security.allowRemoteAccess`** (Options → Network access, or
+`AGENTIC_OS_ALLOW_REMOTE=true`) to reach the HUD from another device or the
+machine name — this drops the Host/Origin guards, so only enable it on a trusted
+LAN. The flag is read live, so toggling it applies without a restart.
 
 ## Ports
 

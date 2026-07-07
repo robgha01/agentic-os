@@ -46,6 +46,7 @@ straight to the keychain and are never echoed back).
 | Voice | `voice.mode` (`text`\|`voice`), `voice.announce`, `voice.tts.provider`, `voice.stt.provider` | `text`, `true`, `kokoro`, `faster-whisper` |
 | Mail | `mail.provider`, `mail.tokenSource` | `none`, `device-code` |
 | Vault | `vault.path`, `vault.managedBlocks` | repo `vault/`, `false` |
+| Network access | `security.allowRemoteAccess` (localhost-only vs trusted-LAN) | `false` |
 
 `*` = secret (keychain). Most are editable live in **Options**.
 

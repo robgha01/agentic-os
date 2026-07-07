@@ -185,6 +185,34 @@ export function Options({ hud }: { hud: HudState }) {
       </section>
 
       <section className="opt">
+        <h2 className="opt__h">Network access</h2>
+        {(() => {
+          const on = valueOf("security.allowRemoteAccess", String(cfg.security.allowRemoteAccess)) === "true";
+          return (
+            <div className="opt__row">
+              <span className="opt__key">
+                Allow remote access
+                <span className="opt__sub">reach the HUD from other devices / the machine name</span>
+              </span>
+              <button
+                className={`opt__toggle ${on ? "opt__toggle--on" : ""}`}
+                role="switch"
+                aria-checked={on}
+                onClick={() => change("security.allowRemoteAccess", String(!on))}
+              >
+                <span className="opt__toggleknob" /> {on ? "on" : "off"}
+              </button>
+            </div>
+          );
+        })()}
+        <p className="opt__hint">
+          Off by default: the gateway serves <code>localhost</code> only and blocks cross-site
+          requests (DNS-rebinding + CSRF defense). Turn on to reach it over your LAN —
+          only on a network you trust. Applies live.
+        </p>
+      </section>
+
+      <section className="opt">
         <h2 className="opt__h">Voice</h2>
         <Select label="Mode" {...bind("voice.mode", cfg.voice.mode)} options={["text", "voice"]} />
         <Select label="TTS engine" {...bind("voice.tts.provider", cfg.voice.tts)} options={["kokoro", "openai", "elevenlabs"]} />

@@ -9,13 +9,24 @@
 import { z } from "zod";
 
 /**
- * Concrete providers the OS knows how to drive. Extend the registry to add more.
+ * Concrete providers the OS knows how to drive — the single source of truth for
+ * provider ids (imported everywhere a list/enum is needed; never re-typed).
+ * Extend the registry to add more.
  *  - haiku       : cheap/fast Anthropic model (router default + light skill tier)
  *  - claude-code : strong Anthropic model via headless `claude -p` (no API key)
  *  - ollama      : any local Ollama-served model (native /api/chat)
  *  - openai      : any OpenAI-compatible endpoint (local or remote; key + baseUrl)
  */
-export type ProviderId = "haiku" | "ollama" | "openai" | "claude-code";
+export const PROVIDER_IDS = ["haiku", "ollama", "openai", "claude-code"] as const;
+export type ProviderId = (typeof PROVIDER_IDS)[number];
+export const ProviderIdSchema = z.enum(PROVIDER_IDS);
+
+/**
+ * Providers the router BRAIN can use — the subset above minus `claude-code`
+ * (heavy Opus is a skill-execution tier, never the routing brain).
+ */
+export const ROUTER_PROVIDER_IDS = ["haiku", "ollama", "openai"] as const;
+export type RouterProviderId = (typeof ROUTER_PROVIDER_IDS)[number];
 
 /**
  * How much "brain" a task needs:
@@ -39,7 +50,7 @@ export const ModelPolicySchema = z.object({
   /** Upper bound on acceptable per-call cost, in USD. */
   maxCostUsd: z.number().nonnegative().optional(),
   /** Hard override — bypasses the entire cascade and uses exactly this provider. */
-  pin: z.enum(["haiku", "ollama", "openai", "claude-code"]).optional(),
+  pin: ProviderIdSchema.optional(),
 });
 export type ModelPolicy = z.infer<typeof ModelPolicySchema>;
 

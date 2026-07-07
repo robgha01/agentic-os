@@ -49,6 +49,7 @@ export interface ConfigView {
   providers: ProviderStatus[];
   models: { fallbackOrder: string[]; disabled: string[] };
   tasks: { maxConcurrent: number };
+  security: { allowRemoteAccess: boolean };
   ui: { launch: string; browser: string };
   openai: { baseUrl: string; model: string };
   ollama: { baseUrl: string; model: string };

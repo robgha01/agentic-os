@@ -48,6 +48,7 @@ export const EDITABLE_KEYS = [
   "models.fallbackOrder",
   "models.disabled",
   "tasks.maxConcurrent",
+  "security.allowRemoteAccess",
   "research.disabled",
   "ui.launch",
   "ui.browser",
