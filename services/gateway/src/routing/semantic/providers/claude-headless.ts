@@ -12,6 +12,7 @@
 import type { Action, ProviderId } from "@aos/shared";
 import { claudeSettingArgs } from "../../../util/claude-args.js";
 import { runProcess } from "../../../util/run-process.js";
+import { parseIntentJson, toRouterDecision } from "../parse.js";
 import type { RouterDecision, RouterProvider } from "../provider.types.js";
 import { JSON_RESPONSE_INSTRUCTION, buildRouterSystemPrompt } from "../prompt.js";
 
@@ -63,27 +64,11 @@ export class ClaudeHeadlessProvider implements RouterProvider {
       throw new Error("claude-headless: session returned an error or empty result");
     }
 
-    let parsed: {
-      action?: unknown;
-      confidence?: unknown;
-      parameters?: unknown;
-      reasoning?: unknown;
-    };
-    try {
-      parsed = JSON.parse(envelope.result);
-    } catch {
-      throw new Error("claude-headless: result was not valid JSON intent");
+    const parsed = parseIntentJson(envelope.result);
+    if (!parsed) {
+      throw new Error(`claude-headless: result was not valid JSON intent: ${envelope.result.slice(0, 200)}`);
     }
-
-    return {
-      actionId: String(parsed.action ?? "unknown"),
-      confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
-      parameters:
-        parsed.parameters && typeof parsed.parameters === "object"
-          ? (parsed.parameters as Record<string, unknown>)
-          : {},
-      reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : undefined,
-    };
+    return toRouterDecision(parsed);
   }
 
   /** Spawn `claude -p --output-format json --model <model>`, prompt via stdin. */

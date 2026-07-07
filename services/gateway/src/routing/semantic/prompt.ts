@@ -30,4 +30,5 @@ export function buildRouterSystemPrompt(catalog: readonly Action[]): string {
 
 /** Instruction appended for providers that return free-form JSON (e.g. Ollama). */
 export const JSON_RESPONSE_INSTRUCTION =
-  'Respond with ONLY a JSON object: {"action": string, "confidence": number (0..1), "parameters": object, "reasoning": string}.';
+  'Respond with ONLY a raw JSON object and nothing else — no prose, no explanation, no markdown code fences. ' +
+  'Shape: {"action": string, "confidence": number (0..1), "parameters": object, "reasoning": string}.';

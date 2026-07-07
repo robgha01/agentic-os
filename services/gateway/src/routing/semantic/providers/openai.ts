@@ -7,6 +7,7 @@
  * Uses JSON response mode and parses the assistant message into a RouterDecision.
  */
 import type { Action } from "@aos/shared";
+import { parseIntentJson, toRouterDecision } from "../parse.js";
 import type { RouterDecision, RouterProvider } from "../provider.types.js";
 import { JSON_RESPONSE_INSTRUCTION, buildRouterSystemPrompt } from "../prompt.js";
 
@@ -49,21 +50,8 @@ export class OpenAiProvider implements RouterProvider {
     const content = data.choices?.[0]?.message?.content;
     if (!content) throw new Error("openai: empty response content");
 
-    let parsed: { action?: unknown; confidence?: unknown; parameters?: unknown; reasoning?: unknown };
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      throw new Error("openai: response was not valid JSON");
-    }
-
-    return {
-      actionId: String(parsed.action ?? "unknown"),
-      confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
-      parameters:
-        parsed.parameters && typeof parsed.parameters === "object"
-          ? (parsed.parameters as Record<string, unknown>)
-          : {},
-      reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : undefined,
-    };
+    const parsed = parseIntentJson(content);
+    if (!parsed) throw new Error(`openai: response was not valid JSON: ${content.slice(0, 200)}`);
+    return toRouterDecision(parsed);
   }
 }
