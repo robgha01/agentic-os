@@ -14,9 +14,11 @@ import { ContextCards } from "./components/ContextCards.js";
 import { Options } from "./components/Options.js";
 import { WidgetTray } from "./components/WidgetTray.js";
 import { PanelResizer } from "./components/PanelResizer.js";
+import { TabBar } from "./components/TabBar.js";
 import { useGateway } from "./useGateway.js";
 import {
   loadWorkspace, saveWorkspace, moveWidget, placeWidget, removeWidget,
+  addPage, renamePage, removePage, setActivePage,
   activeSlots, unplacedWidgets, type SlotId, type Workspace,
 } from "./layout.js";
 import type { WidgetId } from "./widget-registry.js";
@@ -41,6 +43,14 @@ export function App() {
   const onMove = useCallback((from: SlotId, to: SlotId) => commit(moveWidget(ws, from, to)), [ws, commit]);
   const onAdd = useCallback((slot: SlotId, widget: WidgetId) => commit(placeWidget(ws, slot, widget)), [ws, commit]);
   const onRemove = useCallback((slot: SlotId) => commit(removeWidget(ws, slot)), [ws, commit]);
+
+  const onSelectPage = useCallback((id: string) => commit(setActivePage(ws, id)), [ws, commit]);
+  const onAddPage = useCallback(() => {
+    const id = crypto.randomUUID();
+    commit(setActivePage(addPage(ws, id, `Page ${ws.pages.length + 1}`), id));
+  }, [ws, commit]);
+  const onRenamePage = useCallback((id: string, name: string) => commit(renamePage(ws, id, name)), [ws, commit]);
+  const onRemovePage = useCallback((id: string) => commit(removePage(ws, id)), [ws, commit]);
 
   const [widths, setWidths] = useState<PanelWidths>(() => loadPanelWidths());
   const resizeLeft = useCallback((clientX: number) => {
@@ -67,6 +77,14 @@ export function App() {
 
       {view === "dashboard" ? (
         <div className="dash">
+          <TabBar
+            pages={ws.pages}
+            activeId={ws.activePageId}
+            onSelect={onSelectPage}
+            onAdd={onAddPage}
+            onRename={onRenamePage}
+            onRemove={onRemovePage}
+          />
           <main
             className="stage"
             style={{ ["--panel-left" as string]: `${widths.left}px`, ["--panel-right" as string]: `${widths.right}px` }}
