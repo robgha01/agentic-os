@@ -13,12 +13,14 @@ import { DocViewer } from "./components/DocViewer.js";
 import { ContextCards } from "./components/ContextCards.js";
 import { Options } from "./components/Options.js";
 import { WidgetTray } from "./components/WidgetTray.js";
+import { PanelResizer } from "./components/PanelResizer.js";
 import { useGateway } from "./useGateway.js";
 import {
   loadWorkspace, saveWorkspace, moveWidget, placeWidget, removeWidget,
   activeSlots, unplacedWidgets, type SlotId, type Workspace,
 } from "./layout.js";
 import type { WidgetId } from "./widget-registry.js";
+import { clampAgainstViewport, loadPanelWidths, savePanelWidths, type PanelWidths } from "./panel-size.js";
 
 const CORE_LABEL: Record<string, string> = {
   idle: "standing by",
@@ -40,6 +42,22 @@ export function App() {
   const onAdd = useCallback((slot: SlotId, widget: WidgetId) => commit(placeWidget(ws, slot, widget)), [ws, commit]);
   const onRemove = useCallback((slot: SlotId) => commit(removeWidget(ws, slot)), [ws, commit]);
 
+  const [widths, setWidths] = useState<PanelWidths>(() => loadPanelWidths());
+  const resizeLeft = useCallback((clientX: number) => {
+    setWidths((w) => {
+      const next = { ...w, left: clampAgainstViewport(clientX, w.right, window.innerWidth) };
+      savePanelWidths(next);
+      return next;
+    });
+  }, []);
+  const resizeRight = useCallback((clientX: number) => {
+    setWidths((w) => {
+      const next = { ...w, right: clampAgainstViewport(window.innerWidth - clientX, w.left, window.innerWidth) };
+      savePanelWidths(next);
+      return next;
+    });
+  }, []);
+
   const slots = activeSlots(ws);
   const unplaced = unplacedWidgets(ws);
 
@@ -49,8 +67,12 @@ export function App() {
 
       {view === "dashboard" ? (
         <div className="dash">
-          <main className="stage">
+          <main
+            className="stage"
+            style={{ ["--panel-left" as string]: `${widths.left}px`, ["--panel-right" as string]: `${widths.right}px` }}
+          >
             <Panel side="left" slots={["left-top", "left-mid", "left-bottom"]} layout={slots} hud={hud} unplaced={unplaced} onMove={onMove} onAdd={onAdd} onRemove={onRemove} />
+            <PanelResizer side="left" onResize={resizeLeft} />
 
             <section className="center">
               <div className="core-stage">
@@ -65,6 +87,7 @@ export function App() {
               ) : null}
             </section>
 
+            <PanelResizer side="right" onResize={resizeRight} />
             <Panel side="right" slots={["right-top", "right-mid", "right-bottom"]} layout={slots} hud={hud} unplaced={unplaced} onMove={onMove} onAdd={onAdd} onRemove={onRemove} />
           </main>
 
