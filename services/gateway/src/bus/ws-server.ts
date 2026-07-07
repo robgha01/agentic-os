@@ -290,6 +290,7 @@ export class GatewayServer {
               announce: config.voice.announce,
               micMode: config.voice.micMode,
               wakeWord: config.voice.wakeWord,
+              wakeProvider: config.voice.wakeProvider,
               stt: config.voice.stt.provider,
               tts: config.voice.tts.provider,
               voice: config.voice.tts.voice ?? "",

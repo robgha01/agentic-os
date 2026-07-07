@@ -39,6 +39,7 @@ export const EDITABLE_KEYS = [
   "voice.announce",
   "voice.micMode",
   "voice.wakeWord",
+  "voice.wakeProvider",
   "voice.tts.provider",
   "voice.tts.voice",
   "voice.stt.provider",

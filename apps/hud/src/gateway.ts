@@ -137,7 +137,7 @@ export interface VoiceEnv {
 
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
-  voice: { mode: string; announce: boolean; micMode: string; wakeWord: string; stt: string; tts: string; voice: string; python: string };
+  voice: { mode: string; announce: boolean; micMode: string; wakeWord: string; wakeProvider: string; stt: string; tts: string; voice: string; python: string };
   mail: { provider: string; tokenSource: string; signedIn: boolean };
   research: { sources: { id: string; label: string; auth: string; enabled: boolean }[] };
   providers: ProviderStatus[];

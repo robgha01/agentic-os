@@ -5,7 +5,7 @@
  * shared TTS_PROVIDERS descriptor, so a new engine adds no conditionals here.
  */
 import { useCallback, useEffect, useState } from "react";
-import { STT_PROVIDER_IDS, TTS_PROVIDER_IDS, ttsProvider } from "@aos/shared";
+import { STT_PROVIDER_IDS, TTS_PROVIDER_IDS, WAKE_PROVIDER_IDS, ttsProvider, wakeProvider } from "@aos/shared";
 import type { HudState } from "../useGateway.js";
 import type { MisakiStatus, SidecarHealth, TtsStatus } from "../gateway.js";
 import { Select, Text } from "./opt-controls.js";
@@ -15,13 +15,15 @@ const MISAKI_CMD = "pip install 'misaki-fork[en]'";
 
 type Bind = (k: string, running: string) => { value: string; onChange: (v: string) => void };
 
-export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, micModeValue, pythonPathValue, hud }: {
+export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, micModeValue, wakeWordValue, wakeProviderValue, pythonPathValue, hud }: {
   bind: Bind;
   mode: string;
   ttsValue: string;
   voiceValue: string;
   sttValue: string;
   micModeValue: string;
+  wakeWordValue: string;
+  wakeProviderValue: string;
   pythonPathValue: string;
   hud: HudState;
 }) {
@@ -170,13 +172,31 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, micMo
       ) : null}
 
       <Select label="STT engine" {...bind("voice.stt.provider", sttValue)} options={[...STT_PROVIDER_IDS]} />
-      <Select label="Mic mode" {...bind("voice.micMode", micModeValue)} options={["push-to-talk", "hands-free"]} />
+      <Select label="Mic mode" {...bind("voice.micMode", micModeValue)} options={["push-to-talk", "hands-free", "wake-word"]} />
       <p className="opt__hint">
         <code>voice</code> mode uses the Python sidecar; installs/downloads run there.
         Mic: <code>push-to-talk</code> holds the Audio I/O button; <code>hands-free</code>
-        keeps the mic open and auto-sends each utterance (voice-activity detection).
-        Wake-word mode is coming next.
+        keeps the mic open and auto-sends each utterance; <code>wake-word</code> only acts
+        after your trigger phrase.
       </p>
+      {micModeValue === "wake-word" ? (
+        <>
+          <Text label="Wake word" {...bind("voice.wakeWord", wakeWordValue)} placeholder="hey jarvis" />
+          <Select label="Wake engine" {...bind("voice.wakeProvider", wakeProviderValue)} options={[...WAKE_PROVIDER_IDS]} />
+          {(() => {
+            const w = wakeProvider(wakeProviderValue);
+            if (!w) return null;
+            return (
+              <p className="opt__hint">
+                <strong>{w.label}</strong> — {w.setup}
+                {w.install ? <> Install manually: <code>{w.install}</code> (into the sidecar).</> : null}
+                {w.keyName ? <> Needs a key in Secrets (<code>{w.keyName}</code>).</> : null}
+                {!w.available && w.id !== "auto" ? " Not available yet — falls back to STT-based." : null}
+              </p>
+            );
+          })()}
+        </>
+      ) : null}
       <VoiceSetup tts={ttsValue} stt={sttValue} pythonPath={pythonPathValue} bind={bind} hud={hud} />
     </section>
   );

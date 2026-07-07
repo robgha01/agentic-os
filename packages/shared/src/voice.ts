@@ -74,3 +74,69 @@ export function voiceSetupCommand(c: VoiceEngineChoice, tool: VoiceInstallTool =
   const pkgs = voiceSetupPackages(c).join(" ");
   return tool === "uv" ? `uv pip install ${pkgs}` : `pip install ${pkgs}`;
 }
+
+// --- Wake-word providers -----------------------------------------------------
+
+export const WAKE_PROVIDER_IDS = ["auto", "stt", "openwakeword", "porcupine"] as const;
+export type WakeProviderId = (typeof WAKE_PROVIDER_IDS)[number];
+
+export interface WakeProviderDescriptor {
+  id: WakeProviderId;
+  label: string;
+  /** Where the engine runs — informs the device-aware `auto` policy. */
+  kind: "auto" | "sidecar" | "browser";
+  /** No setup: ships with the sidecar / resolves automatically. */
+  bundled: boolean;
+  /** pip package(s) to install into the sidecar, if any. */
+  install?: string;
+  /** Secret key required, if any (e.g. Picovoice access key). */
+  keyName?: string;
+  /** One-line human setup note (shown in Options). */
+  setup: string;
+  /** Implemented today, or a reserved slot for a future engine. */
+  available: boolean;
+}
+
+/** Descriptor per wake engine — drives the Options setup hints/instructions, so
+ *  a new engine adds no conditionals in the UI. STT is bundled (no setup); the
+ *  others declare their install command or key requirement. */
+export const WAKE_PROVIDERS: Record<WakeProviderId, WakeProviderDescriptor> = {
+  auto: {
+    id: "auto",
+    label: "Auto (best available)",
+    kind: "auto",
+    bundled: true,
+    setup: "Picks the best engine for your device — openWakeWord/Porcupine when set up, STT-based otherwise.",
+    available: true,
+  },
+  stt: {
+    id: "stt",
+    label: "STT-based (any phrase)",
+    kind: "sidecar",
+    bundled: true,
+    setup: "No setup — reuses the sidecar's speech-to-text, so any wake phrase works.",
+    available: true,
+  },
+  openwakeword: {
+    id: "openwakeword",
+    label: "openWakeWord (local)",
+    kind: "sidecar",
+    bundled: false,
+    install: "pip install openwakeword",
+    setup: "Local wake model in the sidecar — fixed phrase set (hey jarvis, hey mycroft, hey rhasspy, alexa). Engine coming soon.",
+    available: false,
+  },
+  porcupine: {
+    id: "porcupine",
+    label: "Porcupine (browser)",
+    kind: "browser",
+    bundled: false,
+    keyName: "picovoice.accessKey",
+    setup: "Runs in the browser — best on phones / in a crowd. Needs a free Picovoice access key. Engine coming soon.",
+    available: false,
+  },
+};
+
+export function wakeProvider(id: string): WakeProviderDescriptor | undefined {
+  return WAKE_PROVIDERS[id as WakeProviderId];
+}

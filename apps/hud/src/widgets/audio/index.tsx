@@ -1,23 +1,31 @@
 /**
  * Audio I/O — voice link status + the controls you reach for most: voice output
- * mode and result auto-announce, toggled inline (persisted + applied live) so
- * you don't have to open Options. The mic control follows voice.micMode:
- * push-to-talk (hold a button) or hands-free (voice-activity detection).
+ * mode and result auto-announce, toggled inline (persisted + applied live). The
+ * mic control follows voice.micMode: push-to-talk (hold a button), hands-free
+ * (voice-activity detection), or wake-word (say the trigger phrase).
  */
 import { useEffect, useRef, useState } from "react";
 import type { HudState } from "../../useGateway.js";
 import type { WidgetDef } from "../_contract.js";
 import { isRecording, startRecording, stopRecording } from "../../mic.js";
 import { isSpeaking } from "../../audio-player.js";
-import { startHandsFree, type HandsFreeHandle } from "../../vad.js";
+import { startHandsFree } from "../../vad.js";
+import { resolveWakeProvider, startWake, type WakeHandle } from "../../wake.js";
+
+// openWakeWord / Porcupine engines aren't implemented yet, so nothing is
+// "available" and the resolver always lands on STT-based. Wire real availability
+// (sidecar /health + Picovoice key presence) when those engines ship.
+const WAKE_AVAILABILITY = { openwakeword: false, porcupine: false };
 
 function AudioIO({ hud }: { hud: HudState }) {
   const [voice, setVoice] = useState(false);
   const [announce, setAnnounce] = useState(true);
   const [micMode, setMicMode] = useState("push-to-talk");
+  const [wakeWord, setWakeWord] = useState("hey jarvis");
+  const [wakeProvider, setWakeProvider] = useState("auto");
   const [dictation, setDictation] = useState<"idle" | "recording" | "transcribing">("idle");
-  const [hands, setHands] = useState({ on: false, speaking: false });
-  const handsRef = useRef<HandsFreeHandle | null>(null);
+  const [listen, setListen] = useState<{ on: boolean; status: string }>({ on: false, status: "" });
+  const listenerRef = useRef<WakeHandle | null>(null);
   const fetchConfig = hud.fetchConfig;
 
   useEffect(() => {
@@ -28,6 +36,8 @@ function AudioIO({ hud }: { hud: HudState }) {
         setVoice(c.voice.mode === "voice");
         setAnnounce(c.voice.announce !== false);
         setMicMode(c.voice.micMode || "push-to-talk");
+        setWakeWord(c.voice.wakeWord || "hey jarvis");
+        setWakeProvider(c.voice.wakeProvider || "auto");
       })
       .catch(() => {});
     return () => {
@@ -35,15 +45,19 @@ function AudioIO({ hud }: { hud: HudState }) {
     };
   }, [fetchConfig, hud.status]);
 
-  // Stop hands-free on unmount, or when the mode switches away from it.
+  const stopListening = () => {
+    listenerRef.current?.stop();
+    listenerRef.current = null;
+    setListen({ on: false, status: "" });
+    hud.setListening(false);
+  };
+  // Stop any running listener on unmount, or whenever the mic mode changes.
+  useEffect(() => () => listenerRef.current?.stop(), []);
   useEffect(() => {
-    if (micMode === "push-to-talk" && handsRef.current) {
-      handsRef.current.stop();
-      handsRef.current = null;
-      setHands({ on: false, speaking: false });
-    }
+    listenerRef.current?.stop();
+    listenerRef.current = null;
+    setListen({ on: false, status: "" });
   }, [micMode]);
-  useEffect(() => () => handsRef.current?.stop(), []);
 
   const toggleVoice = () => {
     const next = !voice;
@@ -57,20 +71,11 @@ function AudioIO({ hud }: { hud: HudState }) {
   };
 
   const speaking = hud.coreState === "speaking";
-  const listening = hud.coreState === "listening";
-  const status = speaking ? "speaking" : listening ? "listening" : voice ? "voice ready" : "text mode";
+  const listeningCore = hud.coreState === "listening";
+  const status = speaking ? "speaking" : listeningCore ? "listening" : voice ? "voice ready" : "text mode";
 
-  // Transcribe a captured clip and route the text like a typed command.
-  const routeClip = async (blob: Blob) => {
-    setDictation("transcribing");
-    try {
-      const text = (await hud.transcribe(blob)).text.trim();
-      if (text) hud.send({ type: "route", input: text });
-    } catch {
-      /* a gateway notification surfaces the failure */
-    } finally {
-      setDictation("idle");
-    }
+  const route = (text: string) => {
+    if (text.trim()) hud.send({ type: "route", input: text.trim() });
   };
 
   // --- Push-to-talk: press → record (barge-in via setListening), release → route.
@@ -86,42 +91,71 @@ function AudioIO({ hud }: { hud: HudState }) {
   const endTalk = async () => {
     hud.setListening(false);
     if (!isRecording()) return;
-    if (dictation === "recording") setDictation("idle");
-    const blob = await stopRecording();
-    if (blob) await routeClip(blob);
+    setDictation("transcribing");
+    try {
+      const blob = await stopRecording();
+      if (blob) route((await hud.transcribe(blob)).text);
+    } catch {
+      /* a gateway notification surfaces the failure */
+    } finally {
+      setDictation("idle");
+    }
   };
   const pttLabel = dictation === "transcribing" ? "transcribing…" : dictation === "recording" ? "● listening — release to send" : "⬤ Hold to talk";
 
-  // --- Hands-free: VAD segments each utterance; the echo guard suppresses capture
-  // while the OS is talking so its own voice isn't recorded and routed back.
-  const toggleHands = async () => {
-    if (handsRef.current) {
-      handsRef.current.stop();
-      handsRef.current = null;
-      setHands({ on: false, speaking: false });
-      hud.setListening(false);
-      return;
-    }
+  // --- Hands-free / wake-word: a toggle starts the appropriate listener. The
+  // echo guard suppresses capture while the OS talks so it isn't looped back.
+  const startListening = async () => {
     try {
-      handsRef.current = await startHandsFree({
-        onUtterance: (blob) => void routeClip(blob),
-        onState: (on, sp) => {
-          setHands({ on, speaking: sp });
-          hud.setListening(sp);
-        },
-        shouldCapture: () => !isSpeaking(),
-      });
+      if (micMode === "wake-word") {
+        const provider = resolveWakeProvider(wakeProvider, WAKE_AVAILABILITY);
+        listenerRef.current = await startWake(provider, {
+          wakeWord: wakeWord || "hey jarvis",
+          transcribe: hud.transcribe,
+          isSpeaking,
+          onCommand: route,
+          onState: (s) => {
+            setListen({ on: true, status: s });
+            hud.setListening(s === "capturing");
+          },
+        });
+      } else {
+        listenerRef.current = await startHandsFree({
+          shouldCapture: () => !isSpeaking(),
+          onUtterance: async (blob) => {
+            setListen({ on: true, status: "thinking" });
+            try {
+              route((await hud.transcribe(blob)).text);
+            } catch {
+              /* notification covers it */
+            }
+            setListen({ on: true, status: "listening" });
+          },
+          onState: (on, sp) => {
+            setListen({ on, status: sp ? "capturing" : "listening" });
+            hud.setListening(sp);
+          },
+        });
+      }
+      setListen({ on: true, status: "listening" });
     } catch {
-      setHands({ on: false, speaking: false }); // mic denied
+      setListen({ on: false, status: "" }); // mic denied
     }
   };
-  const handsLabel = !hands.on
-    ? "○ Start hands-free"
-    : hands.speaking
+  const toggleListen = () => (listenerRef.current ? stopListening() : void startListening());
+
+  const wake = wakeWord || "hey jarvis";
+  const listenLabel = !listen.on
+    ? micMode === "wake-word"
+      ? `○ Wake on "${wake}"`
+      : "○ Start hands-free"
+    : listen.status === "capturing"
       ? "● hearing you…"
-      : dictation === "transcribing"
+      : listen.status === "thinking"
         ? "transcribing…"
-        : "◉ hands-free on — tap to stop";
+        : micMode === "wake-word"
+          ? `◉ listening for "${wake}"`
+          : "◉ hands-free on — tap to stop";
 
   return (
     <div className="audio">
@@ -163,8 +197,8 @@ function AudioIO({ hud }: { hud: HudState }) {
           {pttLabel}
         </button>
       ) : (
-        <button className={`audio__ptt${hands.on ? " audio__ptt--live" : ""}`} onClick={() => void toggleHands()}>
-          {handsLabel}
+        <button className={`audio__ptt${listen.on ? " audio__ptt--live" : ""}`} onClick={toggleListen}>
+          {listenLabel}
         </button>
       )}
       <div className="audio__hint">voice link · {micMode} · {voice ? "standby" : "text default"}</div>

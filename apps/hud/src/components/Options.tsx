@@ -193,6 +193,8 @@ export function Options({ hud }: { hud: HudState }) {
         voiceValue={valueOf("voice.tts.voice", cfg.voice.voice)}
         sttValue={valueOf("voice.stt.provider", cfg.voice.stt)}
         micModeValue={valueOf("voice.micMode", cfg.voice.micMode ?? "push-to-talk")}
+        wakeWordValue={valueOf("voice.wakeWord", cfg.voice.wakeWord ?? "hey jarvis")}
+        wakeProviderValue={valueOf("voice.wakeProvider", cfg.voice.wakeProvider ?? "auto")}
         pythonPathValue={valueOf("voice.pythonPath", cfg.voice.python ?? "")}
         hud={hud}
       />

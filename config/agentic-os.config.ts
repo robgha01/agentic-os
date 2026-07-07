@@ -92,6 +92,9 @@ export interface AgenticOsConfig {
     micMode: "push-to-talk" | "hands-free" | "wake-word";
     /** Spoken trigger for wake-word mode (case-insensitive), e.g. "hey jarvis". */
     wakeWord: string;
+    /** Which wake engine to use. "auto" resolves per-device to the best available
+     *  (openWakeWord/Porcupine when set up), with STT-based as the universal floor. */
+    wakeProvider: "auto" | "stt" | "openwakeword" | "porcupine";
     stt: { provider: string; model?: string; apiKeyEnv?: string };
     tts: { provider: string; voice?: string; apiKeyEnv?: string };
     sidecarUrl: string;
@@ -210,6 +213,11 @@ function build(): AgenticOsConfig {
       "push-to-talk",
     ),
     wakeWord: cfg("voice.wakeWord", "AGENTIC_OS_VOICE_WAKE_WORD", "hey jarvis"),
+    wakeProvider: oneOf(
+      cfg("voice.wakeProvider", "AGENTIC_OS_VOICE_WAKE_PROVIDER", "auto"),
+      ["auto", "stt", "openwakeword", "porcupine"],
+      "auto",
+    ),
     stt: {
       provider: cfg("voice.stt.provider", "AGENTIC_OS_STT_PROVIDER", "faster-whisper"),
       model: cfgOpt("voice.stt.model", "AGENTIC_OS_STT_MODEL"),
