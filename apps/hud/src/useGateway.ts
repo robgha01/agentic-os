@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand, OsEvent, SkillCard } from "@aos/shared";
+import { onSpeakingChange, speak, stopSpeaking } from "./audio-player.js";
 import {
   GatewayClient,
   type ConfigView,
@@ -142,7 +143,8 @@ export function useGateway(): HudState {
   const [lastSpeech, setLastSpeech] = useState<{ text: string; at: number } | null>(null);
   const [signals, setSignals] = useState(0);
   const [signalSeries, setSignalSeries] = useState<number[]>(() => Array(SERIES_LEN).fill(0));
-  const [listening, setListening] = useState(false);
+  const [listening, setListeningRaw] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [records, setRecords] = useState<VaultSummary[]>([]);
   const [openDocPath, setOpenDocPath] = useState<string | null>(null);
   const [taskCards, setTaskCards] = useState<TaskCardView[]>(loadCards);
@@ -247,11 +249,9 @@ export function useGateway(): HudState {
         break;
       case "speech":
         setLastSpeech({ text: e.text, at: Date.now() });
-        // One element per event so a second announcement doesn't cut off the
-        // first mid-sentence (they overlap rather than truncate).
-        // Autoplay may be blocked until the first user gesture, or the clip URL
-        // may be unreachable — surface it rather than failing silently.
-        if (e.audioUrl) void new Audio(e.audioUrl).play().catch((err) => console.warn("[voice] audio playback failed:", err?.message ?? err));
+        // Route through the single voice channel: a new clip replaces whatever
+        // was playing, so announcements + repeated Speak clicks never overlap.
+        if (e.audioUrl) speak(e.audioUrl);
         break;
       case "auth.prompt":
         setAuth({ service: e.service, verificationUri: e.verificationUri, userCode: e.userCode, message: e.message });
@@ -364,14 +364,25 @@ export function useGateway(): HudState {
     [],
   );
 
+  // Mirror the single voice channel's real playback state into React.
+  useEffect(() => onSpeakingChange(setSpeaking), []);
+
+  // Barge-in: the moment you start talking (hold-to-talk) or typing (command
+  // bar focus), cut the OS off mid-sentence — one voice at a time, and it's
+  // rude to talk over the user.
+  const setListening = useCallback((on: boolean) => {
+    if (on) stopSpeaking();
+    setListeningRaw(on);
+  }, []);
+
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
-    if (lastSpeech && Date.now() - lastSpeech.at < 3500) return "speaking";
+    if (speaking) return "speaking";
     if (listening) return "listening";
     return "idle";
     // runningTick participates so this recomputes when running count changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runningTick, lastSpeech, listening]);
+  }, [runningTick, speaking, listening]);
 
   return {
     status,
