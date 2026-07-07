@@ -26,6 +26,7 @@ import { VaultRecorder } from "./memory/vault-recorder.js";
 import { extractSpokenCore } from "./memory/document-builder.js";
 import { Speaker, SpeechBridge } from "./voice/speaker.js";
 import { createTtsProvider } from "./voice/tts-provider.js";
+import { stopSidecarChild } from "./voice/sidecar.js";
 import { createMailProvider, type MailProvider } from "./mail/mail-provider.js";
 import { createLlmService } from "./llm/llm-service.js";
 
@@ -127,6 +128,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (): Promise<void> => {
     console.log("\n[gateway] shutting down…");
+    stopSidecarChild(); // don't orphan a sidecar we spawned
     await server.stop();
     process.exit(0);
   };

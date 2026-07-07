@@ -7,7 +7,61 @@
  */
 import { parseOsEvent, type ClientCommand, type OsEvent, type SkillCard } from "@aos/shared";
 
-const HTTP_BASE = import.meta.env.VITE_GATEWAY_URL ?? "http://localhost:7777";
+const OVERRIDE_KEY = "aos.gateway.url";
+
+/** The manual gateway address the user typed (persisted client-side), or null. */
+export function getGatewayOverride(): string | null {
+  try {
+    return localStorage.getItem(OVERRIDE_KEY);
+  } catch {
+    return null; // private mode / no storage
+  }
+}
+
+/** Set (or clear, with null) the manual gateway address. Caller reloads to apply. */
+export function setGatewayOverride(url: string | null): void {
+  try {
+    if (url) localStorage.setItem(OVERRIDE_KEY, url);
+    else localStorage.removeItem(OVERRIDE_KEY);
+  } catch {
+    /* nothing to persist */
+  }
+}
+
+/** Normalize a typed address into a base URL: add a scheme, drop any path/trailing slash. */
+export function normalizeGatewayUrl(input: string): string | null {
+  const t = input.trim();
+  if (!t) return null;
+  const withScheme = /^https?:\/\//i.test(t) ? t : `http://${t}`;
+  try {
+    return new URL(withScheme).origin; // scheme + host + port only
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where the HUD calls the gateway, most-specific first:
+ *  1. a manual address the user typed (persisted, client-side) — always wins
+ *  2. a build-time VITE_GATEWAY_URL (custom deploys)
+ *  3. dev — the gateway runs on :7777 while Vite serves the HUD on :5173
+ *  4. served by the gateway — talk back to the exact origin the page loaded from,
+ *     so a phone opening http://laptop:7777 connects to the laptop, not its own localhost
+ *  5. localhost fallback (non-browser / opaque origin)
+ */
+function resolveGatewayBase(): string {
+  const override = getGatewayOverride();
+  if (override) return override;
+  if (import.meta.env.VITE_GATEWAY_URL) return import.meta.env.VITE_GATEWAY_URL;
+  if (import.meta.env.DEV) return "http://localhost:7777";
+  const origin = typeof window !== "undefined" ? window.location?.origin : "";
+  if (origin && /^https?:/.test(origin)) return origin;
+  return "http://localhost:7777";
+}
+
+/** The effective gateway base URL this session resolved to (for display). */
+export const GATEWAY_BASE = resolveGatewayBase();
+const HTTP_BASE = GATEWAY_BASE;
 const WS_URL = HTTP_BASE.replace(/^http/, "ws");
 
 export type ConnectionStatus = "connecting" | "online" | "offline";
@@ -63,9 +117,27 @@ export interface SidecarHealth {
   stt?: string;
 }
 
+/** Result of a gateway-managed sidecar start/stop. */
+export interface SidecarActionResult {
+  online: boolean;
+  started?: boolean;
+  stopped?: boolean;
+  note?: string;
+  error?: string;
+}
+
+/** Detected Python environment for the sidecar (interpreter + tooling). */
+export interface VoiceEnv {
+  python: string | null;
+  source: "config" | "venv" | "path" | "none";
+  version: string | null;
+  uv: boolean;
+  venv: boolean;
+}
+
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
-  voice: { mode: string; announce: boolean; stt: string; tts: string; voice: string };
+  voice: { mode: string; announce: boolean; stt: string; tts: string; voice: string; python: string };
   mail: { provider: string; tokenSource: string; signedIn: boolean };
   research: { sources: { id: string; label: string; auth: string; enabled: boolean }[] };
   providers: ProviderStatus[];
@@ -191,6 +263,29 @@ export class GatewayClient {
   async getSidecarHealth(): Promise<SidecarHealth> {
     const res = await fetch(`${HTTP_BASE}/voice/health`);
     return (await res.json()) as SidecarHealth;
+  }
+
+  async getVoiceEnv(): Promise<VoiceEnv> {
+    const res = await fetch(`${HTTP_BASE}/voice/env`);
+    return (await res.json()) as VoiceEnv;
+  }
+
+  async startSidecar(): Promise<SidecarActionResult> {
+    const res = await fetch(`${HTTP_BASE}/voice/sidecar/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    return (await res.json()) as SidecarActionResult;
+  }
+
+  async stopSidecar(): Promise<SidecarActionResult> {
+    const res = await fetch(`${HTTP_BASE}/voice/sidecar/stop`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    return (await res.json()) as SidecarActionResult;
   }
 
   async getMisakiStatus(): Promise<MisakiStatus> {

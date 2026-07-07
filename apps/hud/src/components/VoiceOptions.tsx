@@ -5,21 +5,23 @@
  * shared TTS_PROVIDERS descriptor, so a new engine adds no conditionals here.
  */
 import { useCallback, useEffect, useState } from "react";
-import { TTS_PROVIDER_IDS, ttsProvider } from "@aos/shared";
+import { STT_PROVIDER_IDS, TTS_PROVIDER_IDS, ttsProvider } from "@aos/shared";
 import type { HudState } from "../useGateway.js";
 import type { MisakiStatus, SidecarHealth, TtsStatus } from "../gateway.js";
 import { Select, Text } from "./opt-controls.js";
+import { VoiceSetup } from "./VoiceSetup.js";
 
 const MISAKI_CMD = "pip install 'misaki-fork[en]'";
 
 type Bind = (k: string, running: string) => { value: string; onChange: (v: string) => void };
 
-export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, hud }: {
+export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, pythonPathValue, hud }: {
   bind: Bind;
   mode: string;
   ttsValue: string;
   voiceValue: string;
   sttValue: string;
+  pythonPathValue: string;
   hud: HudState;
 }) {
   const cap = ttsProvider(ttsValue);
@@ -166,10 +168,11 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, hud }
         </>
       ) : null}
 
-      <Select label="STT engine" {...bind("voice.stt.provider", sttValue)} options={["faster-whisper", "openai"]} />
+      <Select label="STT engine" {...bind("voice.stt.provider", sttValue)} options={[...STT_PROVIDER_IDS]} />
       <p className="opt__hint">
         <code>voice</code> mode uses the Python sidecar; installs/downloads run there.
       </p>
+      <VoiceSetup tts={ttsValue} stt={sttValue} pythonPath={pythonPathValue} bind={bind} hud={hud} />
     </section>
   );
 }

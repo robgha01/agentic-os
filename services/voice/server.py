@@ -16,6 +16,8 @@ NOTE: not exercised in CI — requires the ML deps / keys on the user's machine.
 from __future__ import annotations
 
 import os
+import threading
+import time
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -29,6 +31,54 @@ import tts as tts_mod
 
 cfg = config.load()
 app = FastAPI(title="agentic-os voice sidecar")
+
+
+def _pid_alive(pid: int) -> bool:
+    """Cross-platform 'is this process still running?'."""
+    if pid <= 0:
+        return True
+    if os.name == "nt":
+        import ctypes
+
+        STILL_ACTIVE = 259
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            k.GetExitCodeProcess(h, ctypes.byref(code))
+            return code.value == STILL_ACTIVE
+        finally:
+            k.CloseHandle(h)
+    try:
+        os.kill(pid, 0)  # signal 0 = existence check
+        return True
+    except OSError:
+        return False
+
+
+def _start_parent_watchdog() -> None:
+    """If launched by the gateway (AGENTIC_OS_PARENT_PID set), self-exit when the
+    parent dies — even on an ungraceful gateway crash the shutdown hook can't catch.
+    A manually-started sidecar (no such env) runs independently."""
+    raw = os.environ.get("AGENTIC_OS_PARENT_PID")
+    if not raw:
+        return
+    try:
+        ppid = int(raw)
+    except ValueError:
+        return
+
+    def _watch() -> None:
+        while True:
+            time.sleep(2)
+            if not _pid_alive(ppid):
+                os._exit(0)
+
+    threading.Thread(target=_watch, name="parent-watchdog", daemon=True).start()
+
 
 # Lazily-instantiated provider singletons.
 _stt: stt_mod.SttProvider | None = None
@@ -115,4 +165,5 @@ def audio(name: str) -> FileResponse:
 
 
 if __name__ == "__main__":
+    _start_parent_watchdog()
     uvicorn.run(app, host=cfg.host, port=cfg.port)

@@ -26,6 +26,8 @@ import { serveHud } from "./static-hud.js";
 import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
 import { now, type EventBus } from "./event-bus.js";
 import { installMisaki, installTts, misakiStatus, sidecarHealth, ttsStatus } from "../voice/installer.js";
+import { startSidecar, stopSidecar } from "../voice/sidecar.js";
+import { detectEnv } from "../voice/env.js";
 
 export class GatewayServer {
   private readonly http: Server;
@@ -136,6 +138,15 @@ export class GatewayServer {
         return;
       }
 
+      // Detected Python environment (interpreter, uv availability) for the setup panel.
+      if (req.method === "GET" && url.pathname === "/voice/env") {
+        try {
+          return json(res, detectEnv());
+        } catch (e) {
+          return json(res, { python: null, source: "none", version: null, uv: false, venv: false, error: String(e) });
+        }
+      }
+
       // Voice model status (read-only) — proxied to the sidecar. Never throws to
       // the client: an unreachable sidecar reports not-ready so the HUD degrades.
       if (req.method === "GET" && url.pathname === "/voice/tts/status") {
@@ -181,6 +192,31 @@ export class GatewayServer {
         return;
       }
 
+      // Start/stop the voice sidecar as a gateway-managed child. Same CSRF gate.
+      if (req.method === "POST" && (url.pathname === "/voice/sidecar/start" || url.pathname === "/voice/sidecar/stop")) {
+        if (!originOk(req.headers.origin)) {
+          return json(res, { ok: false, error: "forbidden origin" }, 403);
+        }
+        const starting = url.pathname.endsWith("/start");
+        void (starting ? startSidecar() : stopSidecar()).then(
+          (r) => {
+            this.bus.emit({
+              type: "notification",
+              at: now(),
+              level: r.error ? "error" : "info",
+              message: r.error
+                ? `Voice sidecar: ${r.error}`
+                : starting
+                  ? r.online ? "Voice sidecar online." : "Voice sidecar did not start."
+                  : "Voice sidecar stopped.",
+            });
+            json(res, r);
+          },
+          (e) => json(res, { online: false, error: String(e) }, 503),
+        );
+        return;
+      }
+
       // misaki install — pip runs in the sidecar's venv. Same CSRF/localhost gate.
       if (req.method === "POST" && url.pathname === "/voice/misaki/install") {
         if (!originOk(req.headers.origin)) {
@@ -221,6 +257,7 @@ export class GatewayServer {
               stt: config.voice.stt.provider,
               tts: config.voice.tts.provider,
               voice: config.voice.tts.voice ?? "",
+              python: config.voice.pythonPath ?? "",
             },
             mail: {
               provider: config.mail.provider,

@@ -13,8 +13,10 @@ import {
   type ConfigView,
   type ConnectionStatus,
   type MisakiStatus,
+  type SidecarActionResult,
   type SidecarHealth,
   type TtsStatus,
+  type VoiceEnv,
   type VaultDoc,
   type VaultSummary,
 } from "./gateway.js";
@@ -92,6 +94,9 @@ export interface HudState {
   getMisakiStatus: () => Promise<MisakiStatus>;
   installMisaki: () => Promise<MisakiStatus>;
   getSidecarHealth: () => Promise<SidecarHealth>;
+  getVoiceEnv: () => Promise<VoiceEnv>;
+  startSidecar: () => Promise<SidecarActionResult>;
+  stopSidecar: () => Promise<SidecarActionResult>;
 }
 
 const MAX_OPS = 60;
@@ -344,6 +349,18 @@ export function useGateway(): HudState {
     () => clientRef.current?.getSidecarHealth() ?? Promise.reject(new Error("not connected")),
     [],
   );
+  const getVoiceEnv = useCallback(
+    () => clientRef.current?.getVoiceEnv() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
+  const startSidecar = useCallback(
+    () => clientRef.current?.startSidecar() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
+  const stopSidecar = useCallback(
+    () => clientRef.current?.stopSidecar() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
 
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
@@ -385,5 +402,8 @@ export function useGateway(): HudState {
     getMisakiStatus,
     installMisaki,
     getSidecarHealth,
+    getVoiceEnv,
+    startSidecar,
+    stopSidecar,
   };
 }
