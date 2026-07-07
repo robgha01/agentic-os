@@ -11,6 +11,50 @@ import type { VaultDoc } from "../gateway.js";
 
 marked.setOptions({ breaks: true, gfm: true });
 
+// Reference/detail sections that start collapsed — the reader scans the TL;DR and
+// lead section, then expands citations/findings on demand. Everything stays
+// collapsible; only the default open/closed state differs.
+const COLLAPSED_BY_DEFAULT = /^(key findings|findings|sources|related|references|citations|appendix)$/i;
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+}
+
+/**
+ * Render a record body: everything before the first `## ` heading (title's
+ * already stripped, so this is the TL;DR + any lead prose) renders normally;
+ * each `## Section` becomes a collapsible <details>. Level-2 only — `###`
+ * subheads inside a section are left to render as normal markdown.
+ */
+function renderCollapsibleBody(body: string): string {
+  const lines = body.split("\n");
+  const preamble: string[] = [];
+  const sections: { title: string; body: string[] }[] = [];
+  let cur: { title: string; body: string[] } | null = null;
+  for (const line of lines) {
+    const m = /^##\s+(.+?)\s*$/.exec(line);
+    if (m) {
+      cur = { title: m[1]!, body: [] };
+      sections.push(cur);
+    } else if (cur) {
+      cur.body.push(line);
+    } else {
+      preamble.push(line);
+    }
+  }
+  const html: string[] = [];
+  if (preamble.join("").trim()) html.push(marked.parse(preamble.join("\n")) as string);
+  for (const s of sections) {
+    const open = COLLAPSED_BY_DEFAULT.test(s.title.trim()) ? "" : " open";
+    const inner = marked.parse(s.body.join("\n")) as string;
+    html.push(
+      `<details class="doc__section"${open}><summary>${escapeHtml(s.title)}</summary>` +
+        `<div class="doc__section-body">${inner}</div></details>`,
+    );
+  }
+  return html.join("\n");
+}
+
 export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
   const [doc, setDoc] = useState<VaultDoc | null>(null);
   const [error, setError] = useState(false);
@@ -45,8 +89,10 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
     () =>
       doc
         ? DOMPurify.sanitize(
-            // Strip the body's leading H1 — we already render the title above.
-            marked.parse(doc.body.replace(/^\s*#\s+[^\n]*\n+/, "")) as string,
+            // Strip the body's leading H1 — we already render the title above —
+            // then render remaining `## ` sections as collapsible <details>.
+            renderCollapsibleBody(doc.body.replace(/^\s*#\s+[^\n]*\n+/, "")),
+            { ADD_ATTR: ["open"] },
           )
         : "",
     [doc],

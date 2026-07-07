@@ -582,7 +582,7 @@ a { color: var(--magenta); }
   position: fixed; inset: 0; z-index: 10; pointer-events: none;
   /* Float below the top bar with breathing room; bottom padding keeps the
      subtitle/waveform strip clear. */
-  display: flex; justify-content: center; align-items: flex-start; padding: 56px 16px 92px;
+  display: flex; justify-content: center; align-items: flex-start; padding: 56px 16px 128px;
 }
 .docoverlay .docviewer { pointer-events: auto; }
 .docviewer {
@@ -623,6 +623,23 @@ a { color: var(--magenta); }
 .doc__body { color: color-mix(in srgb, var(--ink) 90%, var(--mute)); line-height: 1.65; font-size: 14px; }
 .doc__body h1, .doc__body h2, .doc__body h3 { font-family: var(--display); color: var(--ink); margin: 1.4em 0 0.5em; }
 .doc__body h2 { font-size: 17px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+
+/* Collapsible record sections: the <summary> reads like an h2 with a chevron. */
+.doc__section { border-top: 1px solid var(--line); margin-top: 1.2em; }
+.doc__section > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  font-family: var(--display); font-weight: 700; font-size: 17px; color: var(--ink);
+  padding: 12px 0 8px; display: flex; align-items: center; gap: 10px;
+}
+.doc__section > summary::-webkit-details-marker { display: none; }
+.doc__section > summary::before {
+  content: "▸"; color: var(--violet); font-size: 11px; transition: transform 0.15s ease;
+}
+.doc__section[open] > summary::before { transform: rotate(90deg); }
+.doc__section > summary:hover { color: var(--magenta); }
+.doc__section-body { padding: 2px 0 8px; }
+/* the section's own body already spaces its first block; drop the stacked margin */
+.doc__section-body > :first-child { margin-top: 0; }
 .doc__body blockquote {
   margin: 0 0 1em; padding: 10px 16px; border-left: 2px solid var(--magenta);
   background: color-mix(in srgb, var(--magenta) 8%, transparent); color: var(--ink);
