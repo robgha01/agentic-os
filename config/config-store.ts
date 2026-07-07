@@ -37,6 +37,8 @@ export const EDITABLE_KEYS = [
   "router.transport",
   "voice.mode",
   "voice.announce",
+  "voice.micMode",
+  "voice.wakeWord",
   "voice.tts.provider",
   "voice.tts.voice",
   "voice.stt.provider",

@@ -15,12 +15,13 @@ const MISAKI_CMD = "pip install 'misaki-fork[en]'";
 
 type Bind = (k: string, running: string) => { value: string; onChange: (v: string) => void };
 
-export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, pythonPathValue, hud }: {
+export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, micModeValue, pythonPathValue, hud }: {
   bind: Bind;
   mode: string;
   ttsValue: string;
   voiceValue: string;
   sttValue: string;
+  micModeValue: string;
   pythonPathValue: string;
   hud: HudState;
 }) {
@@ -169,8 +170,12 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, pytho
       ) : null}
 
       <Select label="STT engine" {...bind("voice.stt.provider", sttValue)} options={[...STT_PROVIDER_IDS]} />
+      <Select label="Mic mode" {...bind("voice.micMode", micModeValue)} options={["push-to-talk", "hands-free"]} />
       <p className="opt__hint">
         <code>voice</code> mode uses the Python sidecar; installs/downloads run there.
+        Mic: <code>push-to-talk</code> holds the Audio I/O button; <code>hands-free</code>
+        keeps the mic open and auto-sends each utterance (voice-activity detection).
+        Wake-word mode is coming next.
       </p>
       <VoiceSetup tts={ttsValue} stt={sttValue} pythonPath={pythonPathValue} bind={bind} hud={hud} />
     </section>

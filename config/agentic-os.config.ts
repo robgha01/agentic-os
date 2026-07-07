@@ -87,6 +87,11 @@ export interface AgenticOsConfig {
     mode: "text" | "voice";
     /** Auto-announce finished tasks aloud (voice mode only). */
     announce: boolean;
+    /** How the HUD mic captures speech: hold a button, hands-free voice-activity
+     *  detection, or wait for a spoken wake word. */
+    micMode: "push-to-talk" | "hands-free" | "wake-word";
+    /** Spoken trigger for wake-word mode (case-insensitive), e.g. "hey jarvis". */
+    wakeWord: string;
     stt: { provider: string; model?: string; apiKeyEnv?: string };
     tts: { provider: string; voice?: string; apiKeyEnv?: string };
     sidecarUrl: string;
@@ -199,6 +204,12 @@ function build(): AgenticOsConfig {
   voice: {
     mode: oneOf(cfg("voice.mode", "AGENTIC_OS_VOICE_MODE", "text"), ["text", "voice"], "text"),
     announce: cfg("voice.announce", "AGENTIC_OS_VOICE_ANNOUNCE", "true") !== "false",
+    micMode: oneOf(
+      cfg("voice.micMode", "AGENTIC_OS_VOICE_MIC_MODE", "push-to-talk"),
+      ["push-to-talk", "hands-free", "wake-word"],
+      "push-to-talk",
+    ),
+    wakeWord: cfg("voice.wakeWord", "AGENTIC_OS_VOICE_WAKE_WORD", "hey jarvis"),
     stt: {
       provider: cfg("voice.stt.provider", "AGENTIC_OS_STT_PROVIDER", "faster-whisper"),
       model: cfgOpt("voice.stt.model", "AGENTIC_OS_STT_MODEL"),
