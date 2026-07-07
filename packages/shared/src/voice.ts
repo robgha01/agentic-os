@@ -28,3 +28,44 @@ export const TTS_PROVIDERS: Record<TtsProviderId, TtsProviderCapability> = {
 export function ttsProvider(id: string): TtsProviderCapability | undefined {
   return (TTS_PROVIDERS as Record<string, TtsProviderCapability>)[id];
 }
+
+// --- Guided setup: compose the minimal pip install for a chosen engine set ----
+
+export const STT_PROVIDER_IDS = ["faster-whisper", "openai", "none"] as const;
+export type SttProviderId = (typeof STT_PROVIDER_IDS)[number];
+
+export interface VoiceEngineChoice {
+  tts: TtsProviderId;
+  stt: SttProviderId;
+}
+
+/** The sidecar server itself — always needed regardless of engine choice. */
+const SIDECAR_BASE = ["fastapi", "uvicorn[standard]", "python-multipart", "soundfile", "numpy"];
+const TTS_DEPS: Record<TtsProviderId, string[]> = {
+  kokoro: ["kokoro>=0.9"],
+  "kokoro-onnx": ["kokoro-onnx", "onnxruntime"],
+  openai: ["openai"],
+  elevenlabs: ["elevenlabs"],
+};
+const STT_DEPS: Record<SttProviderId, string[]> = {
+  "faster-whisper": ["faster-whisper"],
+  openai: ["openai"],
+  none: [],
+};
+
+/** Minimal pip package set for a given engine choice (deduped, base first). */
+export function voiceSetupPackages(c: VoiceEngineChoice): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of [...SIDECAR_BASE, ...TTS_DEPS[c.tts], ...STT_DEPS[c.stt]]) {
+    if (!seen.has(p)) {
+      seen.add(p);
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+export function voiceSetupCommand(c: VoiceEngineChoice): string {
+  return `pip install ${voiceSetupPackages(c).join(" ")}`;
+}
