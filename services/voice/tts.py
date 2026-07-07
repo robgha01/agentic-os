@@ -45,18 +45,41 @@ class KokoroTts:
 
 class KokoroOnnxTts:
     """Local synthesis via kokoro-onnx (ONNX Runtime, no torch). No API key, but
-    needs the model + voices files on disk — see build(), which validates them."""
+    needs the model + voices files on disk — see build(), which validates them.
+
+    kokoro-onnx recommends the misaki G2P for the v1.0 models (better pronunciation
+    than the built-in phonemizer). We use it when installed (`pip install
+    'misaki-fork[en]'`) and fall back to kokoro-onnx's own tokenizer otherwise, so
+    the provider works either way — just at higher quality with misaki.
+    """
 
     def __init__(self, voice: str, model_path: str, voices_path: str) -> None:
         from kokoro_onnx import Kokoro  # lazy import
 
         self._voice = voice or "af_heart"
         self._kokoro = Kokoro(model_path, voices_path)
+        self._g2p = self._load_misaki()
+
+    @staticmethod
+    def _load_misaki():
+        """The recommended English G2P, or None if misaki/espeak-ng isn't set up."""
+        try:
+            from misaki import en, espeak
+
+            fallback = espeak.EspeakFallback(british=False)
+            return en.G2P(trf=False, british=False, fallback=fallback)
+        except Exception:
+            return None
 
     def synthesize(self, text: str, out_dir: str) -> str:
         import soundfile as sf
 
-        samples, sample_rate = self._kokoro.create(text, voice=self._voice, speed=1.0, lang="en-us")
+        if self._g2p is not None:
+            phonemes, _ = self._g2p(text)
+            samples, sample_rate = self._kokoro.create(phonemes, self._voice, is_phonemes=True)
+        else:
+            # Built-in phonemizer fallback (works without misaki, lower quality).
+            samples, sample_rate = self._kokoro.create(text, voice=self._voice, speed=1.0, lang="en-us")
         path = _out_path(out_dir)
         sf.write(path, samples, sample_rate)
         return path

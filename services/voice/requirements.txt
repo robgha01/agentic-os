@@ -16,7 +16,10 @@ numpy>=1.26
 # torch, lighter/faster on CPU). Enable with AGENTIC_OS_TTS_PROVIDER=kokoro-onnx
 # and download kokoro-v1.0.onnx + voices-v1.0.bin into services/voice/models/
 # (see README). Uses the soundfile/numpy already listed above.
+# misaki-fork[en] is the recommended G2P for the v1.0 models (better pronunciation
+# than the built-in phonemizer); the provider falls back to built-in if it's absent.
 # kokoro-onnx>=0.4
+# misaki-fork[en]>=0.9
 
 # Cloud providers are optional and used only when the matching provider is
 # selected (keys read from env): openai (Whisper/TTS), elevenlabs (TTS).
