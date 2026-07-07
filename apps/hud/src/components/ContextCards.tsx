@@ -83,7 +83,10 @@ export function ContextCards({ hud }: { hud: HudState }) {
   }, []);
 
   // Draw a line from the sphere's edge to each visible card centre, measured
-  // from the live DOM so it stays attached at any viewport size.
+  // from the live DOM so it stays attached at any viewport size. Keyed on the
+  // stable `cards` reference (not the per-render `visible` slice) so this
+  // callback's identity is stable and the layout effect below doesn't re-fire
+  // every commit — which would loop setState → render → setState forever.
   const measure = useCallback(() => {
     const orbit = orbitRef.current;
     const core = orbit?.parentElement?.querySelector<HTMLElement>(".core");
@@ -98,7 +101,7 @@ export function ContextCards({ hud }: { hud: HudState }) {
     const radius = (Math.min(c.width, c.height) / 2) * 0.64;
     const startR = radius + 16;
     const next: Link[] = [];
-    for (const card of visible) {
+    for (const card of cards.slice(0, VISIBLE)) {
       const el = cardRefs.current.get(card.id);
       if (!el) continue;
       const r = el.getBoundingClientRect();
@@ -117,7 +120,7 @@ export function ContextCards({ hud }: { hud: HudState }) {
     }
     setSize({ w: o.width, h: o.height });
     setLinks(next);
-  }, [visible]);
+  }, [cards]);
 
   useLayoutEffect(() => {
     measure();
