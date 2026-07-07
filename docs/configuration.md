@@ -43,7 +43,7 @@ straight to the keychain and are never echoed back).
 | Ollama | `ollama.baseUrl`, `ollama.model` | `http://localhost:11434`, `llama3:8b` |
 | OpenAI-compatible | `openai.baseUrl`, `openai.model`, `openai.apiKey`* | `https://api.openai.com/v1`, `gpt-4o-mini` |
 | Execution fallback | `models.fallbackOrder`, `models.disabled` | `claude-code,openai,ollama,haiku` |
-| Voice | `voice.mode` (`text`\|`voice`), `voice.announce`, `voice.tts.provider`, `voice.stt.provider` | `text`, `true`, `kokoro`, `faster-whisper` |
+| Voice | `voice.mode` (`text`\|`voice`), `voice.announce`, `voice.tts.provider` (`kokoro`\|`kokoro-onnx`\|`openai`\|`elevenlabs`), `voice.stt.provider` | `text`, `true`, `kokoro`, `faster-whisper` |
 | Mail | `mail.provider`, `mail.tokenSource` | `none`, `device-code` |
 | Vault | `vault.path`, `vault.managedBlocks` | repo `vault/`, `false` |
 | Network access | `security.allowRemoteAccess` (localhost-only vs trusted-LAN) | `false` |

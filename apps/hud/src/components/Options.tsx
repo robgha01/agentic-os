@@ -215,7 +215,7 @@ export function Options({ hud }: { hud: HudState }) {
       <section className="opt">
         <h2 className="opt__h">Voice</h2>
         <Select label="Mode" {...bind("voice.mode", cfg.voice.mode)} options={["text", "voice"]} />
-        <Select label="TTS engine" {...bind("voice.tts.provider", cfg.voice.tts)} options={["kokoro", "openai", "elevenlabs"]} />
+        <Select label="TTS engine" {...bind("voice.tts.provider", cfg.voice.tts)} options={["kokoro", "kokoro-onnx", "openai", "elevenlabs"]} />
         <Select label="STT engine" {...bind("voice.stt.provider", cfg.voice.stt)} options={["faster-whisper", "openai"]} />
         <p className="opt__hint">
           <code>voice</code> mode uses the Python sidecar; cloud engines need their key set in the environment.

@@ -20,6 +20,11 @@ def _env_opt(name: str) -> str | None:
     return v if v else None
 
 
+def _model_file(name: str) -> str:
+    """Default location for a downloaded model asset: <sidecar>/models/<name>."""
+    return os.path.join(os.path.dirname(__file__), "models", name)
+
+
 @dataclass(frozen=True)
 class STTConfig:
     provider: str          # "faster-whisper" | "openai"
@@ -29,9 +34,13 @@ class STTConfig:
 
 @dataclass(frozen=True)
 class TTSConfig:
-    provider: str          # "kokoro" | "openai" | "elevenlabs"
+    provider: str          # "kokoro" | "kokoro-onnx" | "openai" | "elevenlabs"
     voice: str
     api_key_env: str | None
+    # kokoro-onnx only: paths to the ONNX model + voices files (downloaded once,
+    # not auto-fetched). Ignored by every other provider.
+    model_path: str | None
+    voices_path: str | None
 
 
 @dataclass(frozen=True)
@@ -56,6 +65,8 @@ def load() -> Config:
             provider=_env("AGENTIC_OS_TTS_PROVIDER", "kokoro"),
             voice=_env("AGENTIC_OS_TTS_VOICE", "af_heart"),
             api_key_env=_env_opt("AGENTIC_OS_TTS_API_KEY_ENV"),
+            model_path=_env("AGENTIC_OS_TTS_KOKORO_ONNX_MODEL", _model_file("kokoro-v1.0.onnx")),
+            voices_path=_env("AGENTIC_OS_TTS_KOKORO_ONNX_VOICES", _model_file("voices-v1.0.bin")),
         ),
         audio_dir=_env("AGENTIC_OS_VOICE_AUDIO_DIR", os.path.join(os.path.dirname(__file__), ".audio")),
     )

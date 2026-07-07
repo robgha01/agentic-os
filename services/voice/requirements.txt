@@ -12,6 +12,12 @@ kokoro>=0.9
 soundfile>=0.12
 numpy>=1.26
 
+# Optional local TTS alternative — kokoro-onnx runs Kokoro on ONNX Runtime (no
+# torch, lighter/faster on CPU). Enable with AGENTIC_OS_TTS_PROVIDER=kokoro-onnx
+# and download kokoro-v1.0.onnx + voices-v1.0.bin into services/voice/models/
+# (see README). Uses the soundfile/numpy already listed above.
+# kokoro-onnx>=0.4
+
 # Cloud providers are optional and used only when the matching provider is
 # selected (keys read from env): openai (Whisper/TTS), elevenlabs (TTS).
 # openai>=1.50
