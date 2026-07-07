@@ -56,6 +56,13 @@ export interface MisakiStatus {
   error?: string;
 }
 
+/** Reachability of the Python voice sidecar + its configured engines. */
+export interface SidecarHealth {
+  online: boolean;
+  tts?: string;
+  stt?: string;
+}
+
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
   voice: { mode: string; announce: boolean; stt: string; tts: string; voice: string };
@@ -179,6 +186,11 @@ export class GatewayClient {
       body: "{}",
     });
     return (await res.json()) as TtsStatus;
+  }
+
+  async getSidecarHealth(): Promise<SidecarHealth> {
+    const res = await fetch(`${HTTP_BASE}/voice/health`);
+    return (await res.json()) as SidecarHealth;
   }
 
   async getMisakiStatus(): Promise<MisakiStatus> {

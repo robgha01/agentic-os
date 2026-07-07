@@ -13,6 +13,7 @@ import {
   type ConfigView,
   type ConnectionStatus,
   type MisakiStatus,
+  type SidecarHealth,
   type TtsStatus,
   type VaultDoc,
   type VaultSummary,
@@ -90,6 +91,7 @@ export interface HudState {
   installTts: () => Promise<TtsStatus>;
   getMisakiStatus: () => Promise<MisakiStatus>;
   installMisaki: () => Promise<MisakiStatus>;
+  getSidecarHealth: () => Promise<SidecarHealth>;
 }
 
 const MAX_OPS = 60;
@@ -338,6 +340,10 @@ export function useGateway(): HudState {
     () => clientRef.current?.installMisaki() ?? Promise.reject(new Error("not connected")),
     [],
   );
+  const getSidecarHealth = useCallback(
+    () => clientRef.current?.getSidecarHealth() ?? Promise.reject(new Error("not connected")),
+    [],
+  );
 
   const coreState: CoreState = useMemo(() => {
     if (runningCount.current > 0) return "thinking";
@@ -378,5 +384,6 @@ export function useGateway(): HudState {
     installTts,
     getMisakiStatus,
     installMisaki,
+    getSidecarHealth,
   };
 }

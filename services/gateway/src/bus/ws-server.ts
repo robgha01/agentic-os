@@ -25,7 +25,7 @@ import { extractSpokenCore } from "../memory/document-builder.js";
 import { serveHud } from "./static-hud.js";
 import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
 import { now, type EventBus } from "./event-bus.js";
-import { installMisaki, installTts, misakiStatus, ttsStatus } from "../voice/installer.js";
+import { installMisaki, installTts, misakiStatus, sidecarHealth, ttsStatus } from "../voice/installer.js";
 
 export class GatewayServer {
   private readonly http: Server;
@@ -127,6 +127,12 @@ export class GatewayServer {
             json(res, { ok: false, error: "invalid JSON" }, 400);
           }
         });
+        return;
+      }
+
+      // Is the Python voice sidecar reachable? Read-only, never throws.
+      if (req.method === "GET" && url.pathname === "/voice/health") {
+        void sidecarHealth().then((h) => json(res, h), () => json(res, { online: false }));
         return;
       }
 

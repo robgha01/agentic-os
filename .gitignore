@@ -65,3 +65,6 @@ planing/vaultreference.txt
 planing/yamlandother.txt
 planing/sources.txt
 planing/yt.txt
+
+# Downloaded voice model weights (kokoro-onnx) — never commit (hundreds of MB)
+services/voice/models/

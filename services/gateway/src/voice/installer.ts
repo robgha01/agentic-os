@@ -93,6 +93,24 @@ export interface MisakiStatus {
 
 const sidecar = () => config.voice.sidecarUrl;
 
+export interface SidecarHealth {
+  online: boolean;
+  tts?: string;
+  stt?: string;
+}
+
+/** Is the Python voice sidecar reachable? Reports its configured engines too. */
+export async function sidecarHealth(): Promise<SidecarHealth> {
+  try {
+    const res = await fetch(`${sidecar()}/health`, { signal: AbortSignal.timeout(1500) });
+    if (!res.ok) return { online: false };
+    const d = (await res.json()) as { tts?: string; stt?: string };
+    return { online: true, tts: d.tts, stt: d.stt };
+  } catch {
+    return { online: false };
+  }
+}
+
 export async function misakiStatus(): Promise<MisakiStatus> {
   const res = await fetch(`${sidecar()}/deps/misaki/status`, { signal: AbortSignal.timeout(2000) });
   if (!res.ok) throw new Error(`sidecar status ${res.status}`);

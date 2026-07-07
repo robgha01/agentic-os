@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { TTS_PROVIDER_IDS, ttsProvider } from "@aos/shared";
 import type { HudState } from "../useGateway.js";
-import type { MisakiStatus, TtsStatus } from "../gateway.js";
+import type { MisakiStatus, SidecarHealth, TtsStatus } from "../gateway.js";
 import { Select, Text } from "./opt-controls.js";
 
 const MISAKI_CMD = "pip install 'misaki-fork[en]'";
@@ -28,6 +28,13 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, hud }
   const [misaki, setMisaki] = useState<MisakiStatus | null>(null);
   const [misakiBusy, setMisakiBusy] = useState(false);
   const [manual, setManual] = useState(false);
+  const [health, setHealth] = useState<SidecarHealth | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    hud.getSidecarHealth().then((h) => alive && setHealth(h)).catch(() => alive && setHealth({ online: false }));
+    return () => { alive = false; };
+  }, [hud]);
 
   const refresh = useCallback(() => {
     if (!cap?.installable) {
@@ -65,6 +72,19 @@ export function VoiceOptions({ bind, mode, ttsValue, voiceValue, sttValue, hud }
   return (
     <section className="opt">
       <h2 className="opt__h">Voice</h2>
+      <div className="opt__row">
+        <span className="opt__key">
+          Voice sidecar
+          <span className={`opt__chip ${health?.online ? "opt__chip--on" : ""}`}>
+            {health == null ? "…" : health.online ? "online ✓" : "offline"}
+          </span>
+          <span className="opt__sub">
+            {health?.online
+              ? "the Python service that synthesizes speech & installs misaki"
+              : "run python server.py in services/voice — needed for speech synthesis & misaki (model files download without it)"}
+          </span>
+        </span>
+      </div>
       <Select label="Mode" {...bind("voice.mode", mode)} options={["text", "voice"]} />
       <Select label="TTS engine" {...bind("voice.tts.provider", ttsValue)} options={[...TTS_PROVIDER_IDS]} />
 
