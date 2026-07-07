@@ -426,7 +426,7 @@ a { color: var(--magenta); }
 .otray__row--unheard .otray__label { color: var(--cyan); }
 
 .center__speech {
-  position: absolute; bottom: 10px; max-width: 80%; text-align: center;
+  position: absolute; bottom: 52px; max-width: 80%; text-align: center;
   color: var(--violet); font-size: 12px; opacity: 0.85;
 }
 

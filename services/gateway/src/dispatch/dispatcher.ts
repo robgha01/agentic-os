@@ -25,6 +25,7 @@ import type { Router } from "../routing/router.js";
 import type { SkillLoader } from "../skills/skill-loader.js";
 import { SkillRuntime } from "../skills/skill-runtime.js";
 import { VaultAdapter } from "../memory/vault-adapter.js";
+import { unbound, unroutable } from "../voice/persona.js";
 
 export class Dispatcher {
   private runtimeExec: SkillRuntime;
@@ -64,17 +65,16 @@ export class Dispatcher {
 
     const skill = this.loader.forAction(intent.actionId);
 
-    // No skill bound — acknowledge and stop (not an error).
+    // No skill bound — say so out loud (in whatever mode is on) and stop. Not an
+    // error: the OS answers rather than going silent, and the persona copy names
+    // a couple of things it *can* do so the dead end is still useful.
     if (!skill) {
       this.startOp(opId, intent.actionId, null, null);
       this.bus.emit({
         type: "notification",
         at: now(),
         level: intent.actionId === "unknown" ? "info" : "warn",
-        message:
-          intent.actionId === "unknown"
-            ? `No confident match for "${intent.rawInput}".`
-            : `No skill bound to action "${intent.actionId}" yet.`,
+        message: intent.actionId === "unknown" ? unroutable(intent.rawInput) : unbound(intent.actionId),
       });
       this.bus.emit({ type: "operation.completed", at: now(), opId, exitCode: 0 });
       return opId;

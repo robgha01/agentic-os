@@ -46,10 +46,30 @@ export const ROUTES: readonly RouteRule[] = [
     examples: ["sync everything", "sync the vault", "synchronize"],
   },
   {
+    id: "inbox-triage",
+    // Email triage asks. Tight enough that a passing mention of "email" in a
+    // longer sentence won't fire — it wants an inbox/triage-shaped request.
+    pattern:
+      /\b(triage (?:my )?(?:inbox|e-?mails?)|(?:check|go through|clear) (?:my )?(?:inbox|e-?mails?)|unread (?:e-?mails?|mail)|my inbox)\b/i,
+    action: "inbox-triage",
+    priority: 85,
+    examples: ["triage my inbox", "check my email", "go through my inbox", "unread emails", "my inbox"],
+  },
+  {
     id: "last-30-days",
     pattern: /\b(last 30 days|deep[\s-]?research)\b/i,
     action: "last-30-days",
     priority: 80,
     examples: ["last 30 days on rust async", "deep research electric vehicles"],
+  },
+  {
+    id: "ship-ticket",
+    // Only fires when a ticket id is actually present — the id is required, and
+    // the named group carries it through to the skill's parameters. A bare
+    // "ship" with no id falls through to the semantic path (which can ask).
+    pattern: /\b(?:ship|ship\s+ticket|jira)\s+(?<ticketId>[a-z]{2,}-\d+)\b/i,
+    action: "ship-ticket",
+    priority: 75,
+    examples: ["ship SCA-431", "ship ticket SCA-431", "jira ABC-12"],
   },
 ] as const;

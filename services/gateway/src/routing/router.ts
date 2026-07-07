@@ -41,15 +41,22 @@ export class Router {
     );
   }
 
-  /** Try the regex table; return a RoutedIntent on a hit, else null. */
+  /** Try the regex table; return a RoutedIntent on a hit, else null. Named
+   *  capture groups on the pattern (e.g. `(?<ticketId>…)`) flow into
+   *  `parameters`, so a deterministic route can still carry a required input. */
   matchRegex(input: string): RoutedIntent | null {
     for (const rule of this.rules) {
-      if (rule.pattern.test(input)) {
+      const m = rule.pattern.exec(input);
+      if (m) {
+        const parameters: Record<string, string> = {};
+        for (const [key, value] of Object.entries(m.groups ?? {})) {
+          if (value !== undefined) parameters[key] = value;
+        }
         return {
           actionId: rule.action,
           source: "regex",
           confidence: 1,
-          parameters: {},
+          parameters,
           rawInput: input,
         };
       }
