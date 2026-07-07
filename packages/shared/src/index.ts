@@ -3,3 +3,4 @@ export * from "./models.js";
 export * from "./skill.js";
 export * from "./events.js";
 export * from "./vault.js";
+export * from "./voice.js";

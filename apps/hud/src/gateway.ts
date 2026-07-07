@@ -41,9 +41,18 @@ export interface ProviderStatus {
   model: string;
 }
 
+/** kokoro-onnx (and future installable engines) model-file readiness. */
+export interface TtsStatus {
+  provider: string;
+  installable: boolean;
+  ready: boolean;
+  missing: string[];
+  error?: string;
+}
+
 export interface ConfigView {
   router: { defaultProvider: string; transport: string };
-  voice: { mode: string; announce: boolean; stt: string; tts: string };
+  voice: { mode: string; announce: boolean; stt: string; tts: string; voice: string };
   mail: { provider: string; tokenSource: string; signedIn: boolean };
   research: { sources: { id: string; label: string; auth: string; enabled: boolean }[] };
   providers: ProviderStatus[];
@@ -150,6 +159,20 @@ export class GatewayClient {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ [key]: value }),
     });
+  }
+
+  async getTtsStatus(provider: string): Promise<TtsStatus> {
+    const res = await fetch(`${HTTP_BASE}/voice/tts/status?provider=${encodeURIComponent(provider)}`);
+    return (await res.json()) as TtsStatus;
+  }
+
+  async installTts(): Promise<TtsStatus> {
+    const res = await fetch(`${HTTP_BASE}/voice/tts/install`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    return (await res.json()) as TtsStatus;
   }
 
   dispose(): void {

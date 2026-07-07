@@ -629,6 +629,7 @@ a { color: var(--magenta); }
   padding: 8px 14px; border-radius: 6px; cursor: pointer;
 }
 .opt__btn:hover { background: color-mix(in srgb, var(--magenta) 28%, transparent); }
+.opt__btn[disabled] { opacity: 0.6; cursor: progress; }
 
 /* ---- Auth overlay ---- */
 .overlay {

@@ -17,11 +17,31 @@ to `voice` mode and want real audio.
 | Direction | env | Options |
 |---|---|---|
 | STT | `AGENTIC_OS_STT_PROVIDER` | `faster-whisper` (local, default), `openai` (key) |
-| TTS | `AGENTIC_OS_TTS_PROVIDER` | `kokoro` (local, default), `openai` (key), `elevenlabs` (key) |
+| TTS | `AGENTIC_OS_TTS_PROVIDER` | `kokoro` (local torch, default), `kokoro-onnx` (local ONNX), `openai` (key), `elevenlabs` (key) |
 
 Cloud keys are read from env; point at them with `AGENTIC_OS_STT_API_KEY_ENV` /
 `AGENTIC_OS_TTS_API_KEY_ENV` (default `OPENAI_API_KEY` / `ELEVENLABS_API_KEY`).
 Engines load lazily, so you only install what your chosen provider needs.
+
+### kokoro-onnx (local, no torch)
+
+Same Kokoro voices as the default `kokoro`, but run through ONNX Runtime — no
+torch dependency, lighter and faster on CPU. Unlike `kokoro`, it does **not**
+auto-download its weights, so do it once:
+
+1. `pip install kokoro-onnx` (uncomment it in `requirements.txt`).
+2. Get the model files, either way:
+   - **In the HUD**: Options → Voice → pick **kokoro-onnx** → click **Download
+     models (~330 MB)**. The button appears whenever the files are missing.
+   - **By hand**: download `kokoro-v1.0.onnx` and `voices-v1.0.bin` from the
+     [kokoro-onnx releases](https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/)
+     into `services/voice/models/` (the default location).
+3. `AGENTIC_OS_TTS_PROVIDER=kokoro-onnx`.
+
+Point elsewhere with `AGENTIC_OS_TTS_KOKORO_ONNX_MODEL` /
+`AGENTIC_OS_TTS_KOKORO_ONNX_VOICES`. If a file is missing, `/tts` returns a 503
+whose message names the exact file and download URL (the gateway then falls back
+to text).
 
 ## Run
 
@@ -46,7 +66,13 @@ AGENTIC_OS_VOICE_MODE=voice npm run start
 - `GET  /health` → `{ status, stt, tts }`
 - `POST /stt` (multipart `audio`) → `{ text }`
 - `POST /tts` (`{ text, voice? }`) → `{ audioUrl }`
+- `GET  /tts/status?provider=` → `{ provider, installable, ready, missing[] }`
+- `POST /tts/install` (`{ provider? }`) → downloads kokoro-onnx assets → status
 - `GET  /audio/<file>` → the synthesized clip
+
+> The gateway proxies the two `/tts/*` install routes as `GET /voice/tts/status`
+> and `POST /voice/tts/install` (localhost/CSRF-gated), emitting notifications the
+> HUD feed renders. The HUD's Download button drives these.
 
 > Files: `server.py` (FastAPI), `stt.py` / `tts.py` (provider factories),
 > `config.py` (env). The local engines (faster-whisper, Kokoro) are large
