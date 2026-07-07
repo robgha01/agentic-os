@@ -19,6 +19,7 @@ import type { VaultAdapter } from "../memory/vault-adapter.js";
 import type { MailProvider } from "../mail/mail-provider.js";
 import type { LlmService } from "../llm/llm-service.js";
 import { buildResultDocument, type SourceRef } from "../memory/document-builder.js";
+import { dedupeRank, splitTags, stripVtt, type ResearchItem } from "./research-utils.js";
 
 /** A research source the user has switched off (skipped by its fetcher). */
 function sourceDisabled(id: string): boolean {
@@ -94,53 +95,9 @@ export interface NativeHandlerContext {
 /** Returns an exit-code-like number (0 = success). */
 export type NativeHandler = (ctx: NativeHandlerContext) => Promise<number>;
 
-// --- Shared research item model --------------------------------------------
-
-interface ResearchItem {
-  title: string;
-  url: string;
-  score: number;
-  author: string;
-  source: string;
-  /** Optional extracted text (e.g. a YouTube transcript) folded into synthesis. */
-  excerpt?: string;
-}
-
-/** Strip a WEBVTT caption file to plain sequential text (no timestamps/tags/dupes). */
-function stripVtt(vtt: string): string {
-  const out: string[] = [];
-  let prev = "";
-  for (let line of vtt.split(/\r?\n/)) {
-    line = line.trim();
-    if (!line) continue;
-    if (/^WEBVTT/i.test(line) || /^(Kind|Language|NOTE)\b/i.test(line)) continue;
-    if (line.includes("-->")) continue; // timestamp cue
-    if (/^\d+$/.test(line)) continue; // cue index
-    line = line.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim(); // inline tags
-    if (!line || line === prev) continue; // dedupe consecutive (auto-sub repeats)
-    out.push(line);
-    prev = line;
-  }
-  return out.join(" ").replace(/\s+/g, " ").trim();
-}
+// --- Shared research item model (see research-utils.ts for the pure helpers) --
 
 const THIRTY_DAYS_SEC = 30 * 24 * 60 * 60;
-
-/**
- * Split a trailing "TAGS: a, b, c" line off an LLM response, returning the body
- * without it plus up to 6 kebab-case tags. Lets the model categorize its own
- * result (per-result tags) without a second call.
- */
-function splitTags(text: string): { body: string; tags: string[] } {
-  const m = text.match(/^[ \t>*-]*tags?\s*:\s*(.+)$/im);
-  if (!m) return { body: text.trim(), tags: [] };
-  const tags = (m[1] ?? "")
-    .split(/[,#]/)
-    .map((t) => t.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""))
-    .filter(Boolean)
-    .slice(0, 6);
-  return { body: text.replace(m[0], "").trim(), tags };
-}
 
 /** Push items + a search-link source onto the shared context. */
 function collect(ctx: NativeHandlerContext, items: ResearchItem[], source: SourceRef): void {
@@ -448,9 +405,7 @@ const synthesizeResearch: NativeHandler = async (ctx) => {
   }
 
   // Dedupe + rank, then number items so the model can cite them by [n].
-  const byUrl = new Map<string, ResearchItem>();
-  for (const it of items) if (!byUrl.has(it.url) || byUrl.get(it.url)!.score < it.score) byUrl.set(it.url, it);
-  const ranked = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 25);
+  const ranked = dedupeRank(items, 25);
   const corpus = ranked
     .map(
       (it, i) =>
@@ -504,9 +459,7 @@ const compileResearch: NativeHandler = async (ctx) => {
   const searchSources = (ctx.context.searchSources as SourceRef[] | undefined) ?? [];
 
   // Dedupe by url, strongest first.
-  const byUrl = new Map<string, ResearchItem>();
-  for (const it of all) if (!byUrl.has(it.url) || (byUrl.get(it.url)!.score < it.score)) byUrl.set(it.url, it);
-  const items = [...byUrl.values()].sort((a, b) => b.score - a.score);
+  const items = dedupeRank(all);
   const top = items.slice(0, 12);
 
   const sourcesUsed = [...new Set(items.map((i) => i.source))];
@@ -642,9 +595,7 @@ const aiWire: NativeHandler = async (ctx) => {
   await fetchReddit(ctx);
 
   const items = (ctx.context.researchItems as ResearchItem[] | undefined) ?? [];
-  const byUrl = new Map<string, ResearchItem>();
-  for (const it of items) if (!byUrl.has(it.url) || byUrl.get(it.url)!.score < it.score) byUrl.set(it.url, it);
-  const ranked = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 25);
+  const ranked = dedupeRank(items, 25);
 
   // Synthesize concise wire headlines (grounded in the items) when an LLM is up.
   let wire = "";
