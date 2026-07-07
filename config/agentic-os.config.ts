@@ -76,7 +76,17 @@ export interface AgenticOsConfig {
   research: { disabled: string[] };
   /** X/Twitter API (recent search) — needs a bearer token; absent = source skipped. */
   x: { bearerToken?: string };
-  vault: { path: string; managedBlocks: boolean };
+  vault: {
+    path: string;
+    managedBlocks: boolean;
+    /** Keep the auto-generated daily journal out of the HUD feed (it still
+     *  writes to the vault for Obsidian; it just doesn't clutter the feed). */
+    hideDailyFromFeed: boolean;
+    /** Obsidian vault NAME for deep links (obsidian://open?vault=…&file=…).
+     *  Empty = derive from the vault folder's basename. Set this if you added
+     *  the folder to Obsidian under a different name. */
+    obsidianVault: string;
+  };
   ports: { gateway: number; voice: number };
   budgets: { defaultMaxLatencyMs: number; defaultMaxCostUsd: number };
   /** Task scheduler: how many operations may run at once; the rest queue (FIFO). */
@@ -191,6 +201,8 @@ function build(): AgenticOsConfig {
     // per-user data dir (~/.agentic-os/vault, alongside config + secrets).
     path: cfg("vault.path", "AGENTIC_OS_VAULT_PATH", join(isPackaged() ? DATA_DIR : REPO_ROOT, "vault")),
     managedBlocks: cfg("vault.managedBlocks", "AGENTIC_OS_VAULT_MANAGED_BLOCKS", "false") === "true",
+    hideDailyFromFeed: cfg("vault.hideDailyFromFeed", "AGENTIC_OS_HIDE_DAILY_FEED", "true") === "true",
+    obsidianVault: cfg("vault.obsidianVault", "AGENTIC_OS_OBSIDIAN_VAULT", ""),
   },
   ports: {
     gateway: cfgNum("ports.gateway", "AGENTIC_OS_GATEWAY_PORT", 7777),

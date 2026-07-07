@@ -83,6 +83,9 @@ export function Options({ hud }: { hud: HudState }) {
     change("research.disabled", [...researchOff].join(","));
   };
 
+  // Hide the auto-generated daily journal from the feed (default on).
+  const hideDaily = valueOf("vault.hideDailyFromFeed", "true") === "true";
+
   return (
     <div className="options">
       <h1 className="options__title">Options</h1>
@@ -143,6 +146,31 @@ export function Options({ hud }: { hud: HudState }) {
           The OpenAI provider speaks any OpenAI-compatible endpoint — local (LM Studio,
           vLLM, llama.cpp) or remote (OpenRouter, Together, Groq, OpenAI). Set its key
           under Secrets below.
+        </p>
+      </section>
+
+      <section className="opt">
+        <h2 className="opt__h">Vault feed</h2>
+        <div className="opt__row">
+          <span className="opt__key">
+            Hide the daily journal
+            <span className="opt__sub">the per-day operations log — still written to the vault, just kept out of the feed</span>
+          </span>
+          <button
+            className={`opt__toggle ${hideDaily ? "opt__toggle--on" : ""}`}
+            role="switch"
+            aria-checked={hideDaily}
+            onClick={() => change("vault.hideDailyFromFeed", hideDaily ? "false" : "true")}
+          >
+            <span className="opt__toggleknob" /> {hideDaily ? "hidden" : "shown"}
+          </button>
+        </div>
+        <Text label="Obsidian vault name" {...bind("vault.obsidianVault", "")} placeholder="(defaults to the vault folder name)" />
+        <p className="opt__hint">
+          "Open in Obsidian" builds an <code>obsidian://open?vault=…&amp;file=…</code> link.
+          Obsidian only opens notes inside a <em>registered</em> vault, so first add the
+          vault folder to Obsidian once ("Open folder as vault"). Set the name here if
+          your Obsidian vault isn't named after the folder.
         </p>
       </section>
 

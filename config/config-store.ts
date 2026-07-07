@@ -55,6 +55,8 @@ export const EDITABLE_KEYS = [
   "tasks.maxConcurrent",
   "security.allowRemoteAccess",
   "research.disabled",
+  "vault.hideDailyFromFeed",
+  "vault.obsidianVault",
   "ui.launch",
   "ui.browser",
 ] as const;

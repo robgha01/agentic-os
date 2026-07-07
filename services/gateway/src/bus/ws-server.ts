@@ -4,7 +4,7 @@
  * inbound `ClientCommand`s drive the dispatcher.
  */
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -329,18 +329,32 @@ export class GatewayServer {
             secrets: secretPresence(),
             secretBackend: secretBackendId,
           });
-        // Recent vault records — the V.A.U.L.T. feed.
-        case "/vault/recent":
-          return json(res, { records: this.vault.listRecent(40) });
+        // Recent vault records — the V.A.U.L.T. feed. The daily journal is a
+        // running op-log; by default it's hidden here so it doesn't bubble to
+        // the top on every operation and drown out real results.
+        case "/vault/recent": {
+          const recent = this.vault.listRecent(80);
+          const shown = config.vault.hideDailyFromFeed
+            ? recent.filter((r) => r.type !== "daily")
+            : recent;
+          return json(res, { records: shown.slice(0, 40) });
+        }
         // One record's rendered content — the result viewer.
         case "/vault/doc": {
           const path = url.searchParams.get("path") ?? "";
           const doc = this.vault.readByPath(path);
           if (!doc) return json(res, { error: "not found" }, 404);
-          // Deep link to open the note in Obsidian (matches the file's vault).
-          // Forward slashes are the most portable in the obsidian:// path param.
-          const abs = join(config.vault.path, path).replace(/\\/g, "/");
-          const obsidianUri = `obsidian://open?path=${encodeURIComponent(abs)}`;
+          // Deep link to open the note in Obsidian. Use the canonical
+          // vault-name + vault-relative-file form (obsidian://open?vault=…&file=…)
+          // rather than an absolute ?path= — the latter only resolves if Obsidian
+          // has that exact folder registered and matches it by path, which fails
+          // with "Unable to find a vault". `vault` defaults to the vault folder's
+          // basename (the name Obsidian gives it when you "Open folder as vault");
+          // override via config vault.obsidianVault. `file` is the relative path
+          // WITHOUT the .md extension (Obsidian appends it).
+          const vaultName = config.vault.obsidianVault || basename(config.vault.path);
+          const file = path.replace(/\\/g, "/").replace(/\.md$/i, "");
+          const obsidianUri = `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(file)}`;
           return json(res, { ...doc, path, obsidianUri });
         }
         default:
