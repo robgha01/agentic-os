@@ -9,7 +9,6 @@
  * Research pipeline (keyless): fetchHackerNews + fetchReddit append to a shared
  * item list, then compileResearch writes one cited research record.
  */
-import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +18,7 @@ import type { VaultAdapter } from "../memory/vault-adapter.js";
 import type { MailProvider } from "../mail/mail-provider.js";
 import type { LlmService } from "../llm/llm-service.js";
 import { buildResultDocument, type SourceRef } from "../memory/document-builder.js";
+import { runProcess } from "../util/run-process.js";
 import { dedupeRank, splitTags, stripVtt, type ResearchItem } from "./research-utils.js";
 
 /** A research source the user has switched off (skipped by its fetcher). */
@@ -35,39 +35,18 @@ function sourceDisabled(id: string): boolean {
  * query) intact. IMPORTANT: callers must keep `%` out of args — cmd.exe mangles
  * yt-dlp's `%(...)s` templates — so we use --dump-json + a literal -o base.
  */
-function runCapture(bin: string, args: string[], timeoutMs: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let out = "";
-    let err = "";
-    let settled = false;
-    // Windows: run via cmd /c with the command + args as SEPARATE argv elements,
-    // so Node does its (correct) per-arg quoting and cmd resolves PATH shims
-    // (pyenv). POSIX: spawn the binary directly. Either way args pass intact.
-    const child =
-      process.platform === "win32"
-        ? spawn("cmd", ["/d", "/s", "/c", bin, ...args], { shell: false })
-        : spawn(bin, args, { shell: false });
-    const timer = setTimeout(() => {
-      settled = true;
-      child.kill("SIGKILL");
-      reject(new Error(`${bin} timed out`));
-    }, timeoutMs);
-    child.stdout.on("data", (d: Buffer) => (out += d.toString()));
-    child.stderr.on("data", (d: Buffer) => (err += d.toString()));
-    child.on("error", (e) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(new Error(`spawn failed: ${e.message}`));
-    });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (code === 0) resolve(out.trim());
-      else reject(new Error(err.trim() || `exit ${code}`));
-    });
-  });
+async function runCapture(bin: string, args: string[], timeoutMs: number): Promise<string> {
+  // Windows: run via cmd /c with the command + args as SEPARATE argv elements,
+  // so Node does its (correct) per-arg quoting and cmd resolves PATH shims
+  // (pyenv). POSIX: spawn the binary directly. Either way args pass intact.
+  const r =
+    process.platform === "win32"
+      ? await runProcess("cmd", ["/d", "/s", "/c", bin, ...args], { timeoutMs })
+      : await runProcess(bin, args, { timeoutMs });
+  if (r.spawnError) throw new Error(`spawn failed: ${r.spawnError}`);
+  if (r.timedOut) throw new Error(`${bin} timed out`);
+  if (r.code !== 0) throw new Error(r.stderr.trim() || `exit ${r.code}`);
+  return r.stdout.trim();
 }
 
 /** Services the gateway injects into every native handler. */

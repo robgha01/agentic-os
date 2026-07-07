@@ -8,10 +8,10 @@
  * Returns `undefined` from the factory when no transport is usable, so callers
  * degrade gracefully (skip synthesis) rather than fail.
  */
-import { spawn } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
 import type { ModelSelection } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
+import { runProcess } from "../util/run-process.js";
 
 export interface CompleteOptions {
   system?: string;
@@ -57,38 +57,20 @@ class ClaudeHeadlessLlm implements LlmService {
     private readonly timeoutMs = 120_000,
   ) {}
 
-  complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
+  async complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
     const full = opts.system ? `${opts.system}\n\n${prompt}` : prompt;
-    return new Promise((resolve, reject) => {
-      // shell:true so Windows resolves the `claude.cmd` shim (npm global bin).
-      const child = spawn(this.bin, ["-p", "--model", this.model], {
-        stdio: ["pipe", "pipe", "pipe"],
-        shell: true,
-      });
-      let stdout = "";
-      let stderr = "";
-      const timer = setTimeout(() => {
-        child.kill("SIGKILL");
-        reject(new Error(`claude -p timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
-
-      child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
-      child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        reject(new Error(`failed to spawn "${this.bin}": ${err.message}`));
-      });
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        const out = stdout.trim();
-        if (code !== 0) return reject(new Error(`claude -p exited ${code}: ${stderr.trim() || "(no stderr)"}`));
-        if (!out) return reject(new Error(`claude -p produced no output${stderr ? `: ${stderr.trim()}` : ""}`));
-        resolve(out);
-      });
-
-      child.stdin.write(full);
-      child.stdin.end();
+    // shell:true so Windows resolves the `claude.cmd` shim (npm global bin).
+    const r = await runProcess(this.bin, ["-p", "--model", this.model], {
+      stdin: full,
+      shell: true,
+      timeoutMs: this.timeoutMs,
     });
+    if (r.spawnError) throw new Error(`failed to spawn "${this.bin}": ${r.spawnError}`);
+    if (r.timedOut) throw new Error(`claude -p timed out after ${this.timeoutMs}ms`);
+    const out = r.stdout.trim();
+    if (r.code !== 0) throw new Error(`claude -p exited ${r.code}: ${r.stderr.trim() || "(no stderr)"}`);
+    if (!out) throw new Error(`claude -p produced no output${r.stderr ? `: ${r.stderr.trim()}` : ""}`);
+    return out;
   }
 }
 
