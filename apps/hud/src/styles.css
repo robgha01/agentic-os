@@ -554,6 +554,11 @@ a { color: var(--magenta); }
 .audio__ptt:active { border-color: var(--magenta); color: var(--magenta); }
 .audio__ptt--live { border-color: var(--magenta); color: var(--magenta); box-shadow: 0 0 14px rgba(255, 61, 154, 0.25); }
 .audio__ptt:disabled { cursor: progress; opacity: 0.8; }
+.audio__heard {
+  font-size: 10px; color: var(--ink); font-style: italic;
+  border-left: 2px solid var(--cyan); padding-left: 8px; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .audio__hint { font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--mute); }
 
 /* ---- Document viewer ---- */

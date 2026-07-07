@@ -25,6 +25,7 @@ function AudioIO({ hud }: { hud: HudState }) {
   const [wakeProvider, setWakeProvider] = useState("auto");
   const [dictation, setDictation] = useState<"idle" | "recording" | "transcribing">("idle");
   const [listen, setListen] = useState<{ on: boolean; status: string }>({ on: false, status: "" });
+  const [heard, setHeard] = useState("");
   const listenerRef = useRef<WakeHandle | null>(null);
   const fetchConfig = hud.fetchConfig;
 
@@ -74,8 +75,12 @@ function AudioIO({ hud }: { hud: HudState }) {
   const listeningCore = hud.coreState === "listening";
   const status = speaking ? "speaking" : listeningCore ? "listening" : voice ? "voice ready" : "text mode";
 
+  // Always show what STT heard — so a mis-hear or a later routing failure is
+  // still traceable to the words that were actually sent.
   const route = (text: string) => {
-    if (text.trim()) hud.send({ type: "route", input: text.trim() });
+    const t = text.trim();
+    setHeard(t || "(nothing heard)");
+    if (t) hud.send({ type: "route", input: t });
   };
 
   // --- Push-to-talk: press → record (barge-in via setListening), release → route.
@@ -201,6 +206,11 @@ function AudioIO({ hud }: { hud: HudState }) {
           {listenLabel}
         </button>
       )}
+      {heard ? (
+        <div className="audio__heard" title={heard}>
+          heard: “{heard}”
+        </div>
+      ) : null}
       <div className="audio__hint">voice link · {micMode} · {voice ? "standby" : "text default"}</div>
     </div>
   );

@@ -66,9 +66,22 @@ class ClaudeHeadlessLlm implements LlmService {
       timeoutMs: this.timeoutMs,
     });
     if (r.spawnError) throw new Error(`failed to spawn "${this.bin}": ${r.spawnError}`);
-    if (r.timedOut) throw new Error(`claude -p timed out after ${this.timeoutMs}ms`);
+    if (r.timedOut) {
+      // Surface whatever it managed to emit before we killed it — a bare "timed
+      // out" hides whether it hung with no output (login/hang) or was mid-answer.
+      const tail = (r.stderr.trim() || r.stdout.trim()).slice(-600);
+      console.error(`[llm:headless] claude -p timed out after ${this.timeoutMs}ms (model=${this.model}); captured tail:\n${tail || "(nothing — it produced no output before the timeout)"}`);
+      throw new Error(
+        tail
+          ? `claude -p timed out after ${this.timeoutMs / 1000}s — last output: ${tail}`
+          : `claude -p timed out after ${this.timeoutMs / 1000}s with no output (it likely hung before responding — check the local Claude Code login and that "${this.bin}" runs)`,
+      );
+    }
     const out = r.stdout.trim();
-    if (r.code !== 0) throw new Error(`claude -p exited ${r.code}: ${r.stderr.trim() || "(no stderr)"}`);
+    if (r.code !== 0) {
+      console.error(`[llm:headless] claude -p exited ${r.code} (model=${this.model}); stderr:\n${r.stderr.trim() || "(none)"}`);
+      throw new Error(`claude -p exited ${r.code}: ${r.stderr.trim() || "(no stderr)"}`);
+    }
     if (!out) throw new Error(`claude -p produced no output${r.stderr ? `: ${r.stderr.trim()}` : ""}`);
     return out;
   }
