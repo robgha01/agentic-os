@@ -143,6 +143,8 @@ export function useGateway(): HudState {
   const opMeta = useRef(new Map<string, { actionId: string; skillId: string | null }>());
   const sinceTick = useRef(0);
   const runningCount = useRef(0);
+  // One reused element so rapid speech events don't stack overlapping players.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [runningTick, setRunningTick] = useState(0); // forces coreState recompute
   const [settledCount, setSettledCount] = useState(0); // refetch vault on op end
 
@@ -234,7 +236,11 @@ export function useGateway(): HudState {
         break;
       case "speech":
         setLastSpeech({ text: e.text, at: Date.now() });
-        if (e.audioUrl) void new Audio(e.audioUrl).play().catch(() => {});
+        if (e.audioUrl) {
+          const player = (audioRef.current ??= new Audio());
+          player.src = e.audioUrl;
+          void player.play().catch(() => {});
+        }
         break;
       case "auth.prompt":
         setAuth({ service: e.service, verificationUri: e.verificationUri, userCode: e.userCode, message: e.message });

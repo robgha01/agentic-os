@@ -5,7 +5,7 @@
  * command-deck catalog over HTTP, and sends ClientCommands (route / invoke /
  * ping). Pure transport — React state lives in useGateway.
  */
-import type { ClientCommand, OsEvent, SkillCard } from "@aos/shared";
+import { parseOsEvent, type ClientCommand, type OsEvent, type SkillCard } from "@aos/shared";
 
 const HTTP_BASE = import.meta.env.VITE_GATEWAY_URL ?? "http://localhost:7777";
 const WS_URL = HTTP_BASE.replace(/^http/, "ws");
@@ -65,6 +65,7 @@ export class GatewayClient {
   private ws?: WebSocket;
   private reconnectTimer?: number;
   private closed = false;
+  private attempts = 0;
 
   constructor(
     private readonly onEvent: (event: OsEvent) => void,
@@ -76,13 +77,21 @@ export class GatewayClient {
     const ws = new WebSocket(WS_URL);
     this.ws = ws;
 
-    ws.onopen = () => this.onStatus("online");
+    ws.onopen = () => {
+      this.attempts = 0;
+      this.onStatus("online");
+    };
     ws.onmessage = (msg) => {
+      let parsed: unknown;
       try {
-        this.onEvent(JSON.parse(msg.data as string) as OsEvent);
+        parsed = JSON.parse(msg.data as string);
       } catch {
-        /* ignore malformed frames */
+        return; // not JSON — drop
       }
+      // Schema-validate before folding into state — bad frames never reach the reducer.
+      const event = parseOsEvent(parsed);
+      if (event) this.onEvent(event);
+      else console.warn("[gateway] dropped malformed event frame", parsed);
     };
     ws.onclose = () => {
       this.onStatus("offline");
@@ -91,9 +100,12 @@ export class GatewayClient {
     ws.onerror = () => ws.close();
   }
 
+  /** Exponential backoff (1.5s → 15s cap, ±250ms jitter) so an absent gateway isn't polled every 1.5s forever. */
   private scheduleReconnect(): void {
     window.clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = window.setTimeout(() => this.connect(), 1500);
+    const delay = Math.min(15_000, 1_500 * 2 ** this.attempts) + Math.random() * 250;
+    this.attempts += 1;
+    this.reconnectTimer = window.setTimeout(() => this.connect(), delay);
   }
 
   send(command: ClientCommand): void {

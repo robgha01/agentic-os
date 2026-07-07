@@ -4,6 +4,7 @@
  * so this just renders the title, a small properties strip, and the prose.
  */
 import { useEffect, useState } from "react";
+import DOMPurify from "dompurify";
 import { marked } from "marked";
 import type { HudState } from "../useGateway.js";
 import type { VaultDoc } from "../gateway.js";
@@ -80,7 +81,13 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
             <div
               className="doc__body"
               // Strip the body's leading H1 — we already render the title above.
-              dangerouslySetInnerHTML={{ __html: marked.parse(doc.body.replace(/^\s*#\s+[^\n]*\n+/, "")) as string }}
+              // Sanitized: vault bodies contain LLM-synthesized text from scraped
+              // web sources, so raw HTML must never reach the DOM.
+              dangerouslySetInnerHTML={{
+                __html: DOMPurify.sanitize(
+                  marked.parse(doc.body.replace(/^\s*#\s+[^\n]*\n+/, "")) as string,
+                ),
+              }}
             />
           </article>
         )}
