@@ -9,7 +9,7 @@
  */
 import { useState } from "react";
 import type { HudState } from "../useGateway.js";
-import type { Layout, SlotId } from "../layout.js";
+import type { PageSlots, SlotId } from "../layout.js";
 import { WIDGETS, hasOptions, type WidgetId } from "../widget-registry.js";
 import {
   loadWidgetOptions,
@@ -22,7 +22,7 @@ import {
 interface PanelProps {
   side: "left" | "right";
   slots: SlotId[];
-  layout: Layout;
+  layout: PageSlots;
   hud: HudState;
   unplaced: WidgetId[];
   onMove: (from: SlotId, to: SlotId) => void;
