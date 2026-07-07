@@ -124,6 +124,7 @@ a { color: var(--magenta); }
 }
 .resizer { cursor: col-resize; background: transparent; touch-action: none; }
 .resizer:hover, .resizer:active { background: color-mix(in srgb, var(--magenta) 40%, transparent); }
+.resizer:focus-visible { outline: none; background: color-mix(in srgb, var(--magenta) 60%, transparent); }
 
 /* ---- Top bar ---- */
 .topbar {

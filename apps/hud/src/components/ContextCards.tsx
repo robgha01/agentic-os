@@ -8,10 +8,10 @@
  * corners around the sphere (stacking when more than four are live), and an SVG
  * layer draws a line from the sphere's edge to each card so they read as
  * anchored to the ball. Each card has an X to dismiss; a top-center "clear all"
- * flushes the set. Cards are session-only — they appear as tasks complete and
- * clear on reload.
+ * flushes the set. Undismissed cards persist across reload (see useGateway's
+ * saveCards); dismiss or "clear all" removes them for good.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { HudState, TaskCardView } from "../useGateway.js";
 
 // Newest card takes top-right, then top-left, bottom-left, bottom-right —
@@ -66,7 +66,7 @@ function boxEntry(
   return { x: sx + t0 * dx, y: sy + t0 * dy };
 }
 
-export function ContextCards({ hud }: { hud: HudState }) {
+export function ContextCards({ hud, coreRef }: { hud: HudState; coreRef: RefObject<HTMLElement> }) {
   const cards = hud.taskCards;
   const visible = cards.slice(0, VISIBLE);
   const overflow = cards.slice(VISIBLE);
@@ -89,7 +89,7 @@ export function ContextCards({ hud }: { hud: HudState }) {
   // every commit — which would loop setState → render → setState forever.
   const measure = useCallback(() => {
     const orbit = orbitRef.current;
-    const core = orbit?.parentElement?.querySelector<HTMLElement>(".core");
+    const core = coreRef.current;
     if (!orbit || !core) return;
     const o = orbit.getBoundingClientRect();
     const c = core.getBoundingClientRect();
@@ -120,7 +120,7 @@ export function ContextCards({ hud }: { hud: HudState }) {
     }
     setSize({ w: o.width, h: o.height });
     setLinks(next);
-  }, [cards]);
+  }, [cards, coreRef]);
 
   useLayoutEffect(() => {
     measure();
