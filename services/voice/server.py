@@ -24,6 +24,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+import audio_decode
 import config
 import deps
 import stt as stt_mod
@@ -121,16 +122,50 @@ async def transcribe(audio: UploadFile) -> dict:
     tmp = os.path.join(cfg.audio_dir, f"in_{safe_name}")
     with open(tmp, "wb") as fh:
         fh.write(await audio.read())
+    # Normalize browser webm/opus to 16 kHz mono WAV when ffmpeg is available
+    # (best Whisper accuracy); otherwise transcribe the raw upload directly.
+    wav = audio_decode.to_wav(tmp)
+    src = wav or tmp
     try:
-        text = get_stt().transcribe(tmp)
+        text = get_stt().transcribe(src)
     except Exception as exc:  # surface provider/key errors to the caller
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     finally:
+        for path in (tmp, wav):
+            if path:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+    return {"text": text}
+
+
+AUDIO_KEEP = 24  # keep only the most recent clips; older ones were already played
+
+
+def _prune_audio_dir() -> None:
+    """Keep only the AUDIO_KEEP most recent clips. Replays re-synthesize (the HUD
+    never re-fetches an old URL), so once served a clip is disposable. Capping by
+    count — not time — bounds the dir without ever risking the clip we just made
+    (it's always the newest) or a clip mid-fetch by a slow/ranged request."""
+    try:
+        names = os.listdir(cfg.audio_dir)
+    except OSError:
+        return
+    files = []
+    for name in names:
+        path = os.path.join(cfg.audio_dir, name)
         try:
-            os.remove(tmp)
+            if os.path.isfile(path):
+                files.append((os.path.getmtime(path), path))
         except OSError:
             pass
-    return {"text": text}
+    files.sort(reverse=True)  # newest first
+    for _, path in files[AUDIO_KEEP:]:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 @app.post("/tts")
@@ -139,6 +174,7 @@ def synthesize(req: TtsRequest) -> dict:
         path = get_tts().synthesize(req.text, cfg.audio_dir)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    _prune_audio_dir()  # after writing, so the fresh clip is counted (and kept)
     name = os.path.basename(path)
     return {"audioUrl": f"http://{cfg.host}:{cfg.port}/audio/{name}"}
 

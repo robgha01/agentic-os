@@ -6,10 +6,12 @@
 import { useEffect, useState } from "react";
 import type { HudState } from "../../useGateway.js";
 import type { WidgetDef } from "../_contract.js";
+import { isRecording, startRecording, stopRecording } from "../../mic.js";
 
 function AudioIO({ hud }: { hud: HudState }) {
   const [voice, setVoice] = useState(false);
   const [announce, setAnnounce] = useState(true);
+  const [dictation, setDictation] = useState<"idle" | "recording" | "transcribing">("idle");
   const fetchConfig = hud.fetchConfig;
 
   useEffect(() => {
@@ -41,6 +43,33 @@ function AudioIO({ hud }: { hud: HudState }) {
   const listening = hud.coreState === "listening";
   const status = speaking ? "speaking" : listening ? "listening" : voice ? "voice ready" : "text mode";
 
+  // Push-to-talk: press → record (barge-in via setListening), release →
+  // transcribe the clip and route the text like a typed command.
+  const beginTalk = async () => {
+    hud.setListening(true); // stops any current speech, shows "listening"
+    try {
+      await startRecording();
+      setDictation("recording");
+    } catch {
+      hud.setListening(false); // mic denied / unavailable
+    }
+  };
+  const endTalk = async () => {
+    hud.setListening(false);
+    if (!isRecording()) return;
+    setDictation("transcribing");
+    try {
+      const blob = await stopRecording();
+      const text = blob ? (await hud.transcribe(blob)).text.trim() : "";
+      if (text) hud.send({ type: "route", input: text });
+    } catch {
+      /* a gateway notification surfaces the failure */
+    } finally {
+      setDictation("idle");
+    }
+  };
+  const pttLabel = dictation === "transcribing" ? "transcribing…" : dictation === "recording" ? "● listening — release to send" : "⬤ Hold to talk";
+
   return (
     <div className="audio">
       <div className="audio__status">
@@ -67,12 +96,17 @@ function AudioIO({ hud }: { hud: HudState }) {
         </button>
       </div>
       <button
-        className="audio__ptt"
-        onMouseDown={() => hud.setListening(true)}
-        onMouseUp={() => hud.setListening(false)}
-        onMouseLeave={() => hud.setListening(false)}
+        className={`audio__ptt${dictation !== "idle" ? " audio__ptt--live" : ""}`}
+        style={{ touchAction: "none" }}
+        disabled={dictation === "transcribing"}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          void beginTalk();
+        }}
+        onPointerUp={() => void endTalk()}
+        onPointerCancel={() => void endTalk()}
       >
-        ⬤ Hold to talk
+        {pttLabel}
       </button>
       <div className="audio__hint">voice link · {voice ? "standby" : "text default"}</div>
     </div>

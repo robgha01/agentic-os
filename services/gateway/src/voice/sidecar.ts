@@ -6,7 +6,7 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { config } from "../../../../config/agentic-os.config.js";
-import { sidecarHealth } from "./installer.js";
+import { sidecarHealth } from "./sidecar-client.js";
 import { resolvePython, useShell, voiceDir } from "./env.js";
 
 /**

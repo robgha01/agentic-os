@@ -25,7 +25,8 @@ import { extractSpokenCore } from "../memory/document-builder.js";
 import { serveHud } from "./static-hud.js";
 import { isLocalHostHeader, isLocalOrigin } from "./origin-guard.js";
 import { now, type EventBus } from "./event-bus.js";
-import { installMisaki, installTts, misakiStatus, sidecarHealth, ttsStatus } from "../voice/installer.js";
+import { installTts, ttsStatus } from "../voice/installer.js";
+import { installMisaki, misakiStatus, sidecarHealth, transcribeAudio } from "../voice/sidecar-client.js";
 import { startSidecar, stopSidecar } from "../voice/sidecar.js";
 import { detectEnv } from "../voice/env.js";
 
@@ -214,6 +215,39 @@ export class GatewayServer {
           },
           (e) => json(res, { online: false, error: String(e) }, 503),
         );
+        return;
+      }
+
+      // Speech-to-text: the HUD posts a mic recording (webm/opus); we forward
+      // the raw bytes to the sidecar's /stt (decode + transcribe) and return the
+      // transcript. The HUD then routes it like a typed command. Same CSRF gate.
+      if (req.method === "POST" && url.pathname === "/voice/stt") {
+        if (!originOk(req.headers.origin)) {
+          return json(res, { error: "forbidden origin" }, 403);
+        }
+        const MAX_AUDIO = 12 * 1024 * 1024; // ~12 MB — generous for push-to-talk
+        const chunks: Buffer[] = [];
+        let total = 0;
+        let tooLarge = false;
+        req.on("data", (c: Buffer) => {
+          if (tooLarge) return;
+          total += c.length;
+          if (total > MAX_AUDIO) {
+            tooLarge = true;
+            res.once("finish", () => req.destroy());
+            return json(res, { error: "audio too large" }, 413);
+          }
+          chunks.push(c);
+        });
+        req.on("end", () => {
+          if (res.writableEnded) return;
+          const audio = Buffer.concat(chunks);
+          if (audio.length === 0) return json(res, { error: "empty audio" }, 400);
+          void transcribeAudio(audio, req.headers["content-type"]).then(
+            (out) => json(res, out),
+            (e) => json(res, { error: String(e) }, 503),
+          );
+        });
         return;
       }
 

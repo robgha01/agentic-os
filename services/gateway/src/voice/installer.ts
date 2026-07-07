@@ -15,7 +15,6 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { config } from "../../../../config/agentic-os.config.js";
 
 const RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/";
 
@@ -81,50 +80,4 @@ export async function installTts(
     onProgress?.(`${a.filename}: done`);
   }
   return ttsStatus(provider);
-}
-
-// --- misaki G2P (a Python package) — MUST run in the sidecar's own interpreter,
-// so unlike the model files these proxy to the sidecar rather than acting locally.
-
-export interface MisakiStatus {
-  installed: boolean;
-  error?: string;
-}
-
-const sidecar = () => config.voice.sidecarUrl;
-
-export interface SidecarHealth {
-  online: boolean;
-  tts?: string;
-  stt?: string;
-}
-
-/** Is the Python voice sidecar reachable? Reports its configured engines too. */
-export async function sidecarHealth(): Promise<SidecarHealth> {
-  try {
-    const res = await fetch(`${sidecar()}/health`, { signal: AbortSignal.timeout(1500) });
-    if (!res.ok) return { online: false };
-    const d = (await res.json()) as { tts?: string; stt?: string };
-    return { online: true, tts: d.tts, stt: d.stt };
-  } catch {
-    return { online: false };
-  }
-}
-
-export async function misakiStatus(): Promise<MisakiStatus> {
-  const res = await fetch(`${sidecar()}/deps/misaki/status`, { signal: AbortSignal.timeout(2000) });
-  if (!res.ok) throw new Error(`sidecar status ${res.status}`);
-  return (await res.json()) as MisakiStatus;
-}
-
-/** Long-running: pip-installs misaki into the sidecar's venv. 10-min ceiling. */
-export async function installMisaki(): Promise<MisakiStatus & { ok?: boolean; log?: string[] }> {
-  const res = await fetch(`${sidecar()}/deps/misaki/install`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-    signal: AbortSignal.timeout(600_000),
-  });
-  if (!res.ok) throw new Error((await res.text()) || `sidecar install ${res.status}`);
-  return (await res.json()) as MisakiStatus & { ok?: boolean; log?: string[] };
 }

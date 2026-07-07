@@ -552,6 +552,8 @@ a { color: var(--magenta); }
 }
 .audio__ptt:hover { border-color: var(--violet); color: var(--ink); }
 .audio__ptt:active { border-color: var(--magenta); color: var(--magenta); }
+.audio__ptt--live { border-color: var(--magenta); color: var(--magenta); box-shadow: 0 0 14px rgba(255, 61, 154, 0.25); }
+.audio__ptt:disabled { cursor: progress; opacity: 0.8; }
 .audio__hint { font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--mute); }
 
 /* ---- Document viewer ---- */

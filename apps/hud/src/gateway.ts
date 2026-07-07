@@ -260,6 +260,17 @@ export class GatewayClient {
     return (await res.json()) as TtsStatus;
   }
 
+  /** Post a mic recording; the gateway forwards it to the sidecar for STT. */
+  async transcribe(blob: Blob): Promise<{ text: string }> {
+    const res = await fetch(`${HTTP_BASE}/voice/stt`, {
+      method: "POST",
+      headers: { "content-type": blob.type || "application/octet-stream" },
+      body: blob,
+    });
+    if (!res.ok) throw new Error(`stt ${res.status}`);
+    return (await res.json()) as { text: string };
+  }
+
   async getSidecarHealth(): Promise<SidecarHealth> {
     const res = await fetch(`${HTTP_BASE}/voice/health`);
     return (await res.json()) as SidecarHealth;

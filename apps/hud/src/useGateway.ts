@@ -102,6 +102,7 @@ export interface HudState {
   getVoiceEnv: () => Promise<VoiceEnv>;
   startSidecar: () => Promise<SidecarActionResult>;
   stopSidecar: () => Promise<SidecarActionResult>;
+  transcribe: (blob: Blob) => Promise<{ text: string }>;
 }
 
 const MAX_OPS = 60;
@@ -379,6 +380,10 @@ export function useGateway(): HudState {
     () => clientRef.current?.stopSidecar() ?? Promise.reject(new Error("not connected")),
     [],
   );
+  const transcribe = useCallback(
+    (blob: Blob) => clientRef.current?.transcribe(blob) ?? Promise.reject(new Error("not connected")),
+    [],
+  );
 
   // Mirror the single voice channel's real playback state into React.
   useEffect(() => onSpeakingChange(setSpeaking), []);
@@ -442,5 +447,6 @@ export function useGateway(): HudState {
     getVoiceEnv,
     startSidecar,
     stopSidecar,
+    transcribe,
   };
 }
