@@ -17,6 +17,7 @@ import type { ModelSelection, OperationResult, RoutedIntent, SkillManifest } fro
 import { config } from "../../../../config/agentic-os.config.js";
 import { EventBus, now } from "../bus/event-bus.js";
 import { createLlmForSelection } from "../llm/llm-service.js";
+import { claudeSettingArgs } from "../util/claude-args.js";
 import { runProcess } from "../util/run-process.js";
 import { NATIVE_HANDLERS, type SkillServices } from "./native-registry.js";
 import type { SkillLoader } from "./skill-loader.js";
@@ -81,11 +82,16 @@ export class SkillRuntime {
         const model = selection?.model ?? config.anthropic.heavyModel;
         const prompt = renderTemplate(exec.promptTemplate, intent.parameters);
         // shell:true so Windows resolves the `claude.cmd` shim; prompt via stdin, never argv.
-        return this.spawnCollect(opId, config.claudeCode.bin, ["-p", "--model", model, ...exec.args], {
-          stdin: prompt,
-          shell: true,
-          timeoutMs: exec.timeoutMs,
-        });
+        return this.spawnCollect(
+          opId,
+          config.claudeCode.bin,
+          ["-p", ...claudeSettingArgs(config.claudeCode.settingSources), "--model", model, ...exec.args],
+          {
+            stdin: prompt,
+            shell: true,
+            timeoutMs: exec.timeoutMs,
+          },
+        );
       }
 
       case "process": {

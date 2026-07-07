@@ -44,7 +44,18 @@ export interface AgenticOsConfig {
     transport: "sdk" | "headless";
     minConfidence: number;
   };
-  claudeCode: { bin: string };
+  claudeCode: {
+    bin: string;
+    /**
+     * `--setting-sources` for every headless `claude -p` the gateway spawns —
+     * which settings tiers that session loads. Default "project,local" excludes
+     * USER-level settings, so global plugins/hooks (superpowers, claude-mem, …)
+     * don't fire on these automated sub-calls: no ~100KB SessionStart flood, no
+     * claude-mem worker spawn, no observations recorded for internal calls. OAuth
+     * auth is unaffected (it's not a setting source). Empty = load all sources.
+     */
+    settingSources: string;
+  };
   anthropic: {
     routerModel: string;
     heavyModel: string;
@@ -137,6 +148,7 @@ function build(): AgenticOsConfig {
   },
   claudeCode: {
     bin: cfg("claudeCode.bin", "AGENTIC_OS_CLAUDE_BIN", "claude"),
+    settingSources: cfg("claudeCode.settingSources", "AGENTIC_OS_CLAUDE_SETTING_SOURCES", "project,local"),
   },
   anthropic: {
     routerModel: cfg("anthropic.routerModel", "AGENTIC_OS_ROUTER_MODEL", "claude-haiku-4-5"),

@@ -28,6 +28,17 @@ apps/hud · services/gateway · services/voice · packages/shared · config · s
 - **Windows**: this dev machine is Windows. `claude` resolves to `claude.cmd`, so
   any `spawn` of it needs `shell: true` (already done in the headless LLM/router).
   Free a stuck port with PowerShell `Get-NetTCPConnection -LocalPort 7777 | … Stop-Process`.
+- **Headless `claude -p` isolation**: every headless spawn (LLM completion, router,
+  skill execution) passes `--setting-sources project,local` so the user's *global*
+  plugins/hooks (superpowers, claude-mem, …) don't fire on these automated
+  sub-calls — otherwise each call runs the full SessionStart chain (~100KB of hook
+  output under `stream-json`, a claude-mem worker boot, and stray observations).
+  OAuth auth is untouched (not a setting source). All three sites route through
+  `claudeSettingArgs()` in `services/gateway/src/util/claude-args.ts`; flip its
+  `ISOLATE_HEADLESS_SESSIONS` constant to `false` (or set `claudeCode.settingSources`
+  empty) to restore loading all sources. Keep completion **buffered plain-text** —
+  do not switch to `--output-format stream-json --verbose` (that's what surfaced
+  the flood in the first place).
 
 ## Conventions
 

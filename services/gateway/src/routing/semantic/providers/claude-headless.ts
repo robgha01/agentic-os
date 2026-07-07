@@ -10,6 +10,7 @@
  * for Haiku and anything else `claude -p` supports.
  */
 import type { Action, ProviderId } from "@aos/shared";
+import { claudeSettingArgs } from "../../../util/claude-args.js";
 import { runProcess } from "../../../util/run-process.js";
 import type { RouterDecision, RouterProvider } from "../provider.types.js";
 import { JSON_RESPONSE_INSTRUCTION, buildRouterSystemPrompt } from "../prompt.js";
@@ -21,6 +22,8 @@ export interface ClaudeHeadlessOptions {
   bin?: string;
   /** Kill the session if it exceeds this. */
   timeoutMs?: number;
+  /** `--setting-sources` scope, so global plugins/hooks don't load for routing. */
+  settingSources?: string;
 }
 
 /** Envelope `claude -p --output-format json` prints on stdout. */
@@ -33,6 +36,7 @@ export class ClaudeHeadlessProvider implements RouterProvider {
   readonly id: ProviderId;
   private readonly bin: string;
   private readonly timeoutMs: number;
+  private readonly settingSources: string;
 
   constructor(
     private readonly model: string,
@@ -41,6 +45,7 @@ export class ClaudeHeadlessProvider implements RouterProvider {
     this.id = opts.id ?? "haiku";
     this.bin = opts.bin ?? "claude";
     this.timeoutMs = opts.timeoutMs ?? 60_000;
+    this.settingSources = opts.settingSources ?? "";
   }
 
   async route(input: string, catalog: readonly Action[]): Promise<RouterDecision> {
@@ -84,11 +89,15 @@ export class ClaudeHeadlessProvider implements RouterProvider {
   /** Spawn `claude -p --output-format json --model <model>`, prompt via stdin. */
   private async runClaude(prompt: string): Promise<ClaudeCliResult> {
     // shell:true resolves claude.cmd on Windows.
-    const r = await runProcess(this.bin, ["-p", "--output-format", "json", "--model", this.model], {
-      stdin: prompt,
-      shell: true,
-      timeoutMs: this.timeoutMs,
-    });
+    const r = await runProcess(
+      this.bin,
+      ["-p", ...claudeSettingArgs(this.settingSources), "--output-format", "json", "--model", this.model],
+      {
+        stdin: prompt,
+        shell: true,
+        timeoutMs: this.timeoutMs,
+      },
+    );
     if (r.spawnError) throw new Error(`claude-headless: failed to spawn "${this.bin}": ${r.spawnError}`);
     if (r.timedOut) throw new Error(`claude-headless: timed out after ${this.timeoutMs}ms`);
     if (r.code !== 0) throw new Error(`claude-headless: exited ${r.code}: ${r.stderr.trim()}`);

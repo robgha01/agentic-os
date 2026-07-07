@@ -84,7 +84,11 @@ export function selectRouterProvider(runtime: ModelRuntimeContext): RouterProvid
   const build: Record<RouterProviderId, () => RouterProvider> = {
     haiku: () =>
       headless
-        ? new ClaudeHeadlessProvider(config.anthropic.routerModel, { id: "haiku", bin: config.claudeCode.bin })
+        ? new ClaudeHeadlessProvider(config.anthropic.routerModel, {
+            id: "haiku",
+            bin: config.claudeCode.bin,
+            settingSources: config.claudeCode.settingSources,
+          })
         : new AnthropicHaikuProvider(config.anthropic.routerModel, config.anthropic.apiKey),
     ollama: () => new OllamaProvider(config.ollama.baseUrl, config.ollama.model),
     openai: () => new OpenAiProvider(config.openai.baseUrl, config.openai.model, config.openai.apiKey),

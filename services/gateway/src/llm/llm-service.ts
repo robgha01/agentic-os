@@ -11,6 +11,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ModelSelection } from "@aos/shared";
 import { config } from "../../../../config/agentic-os.config.js";
+import { claudeSettingArgs } from "../util/claude-args.js";
 import { runProcess } from "../util/run-process.js";
 
 export interface CompleteOptions {
@@ -55,12 +56,13 @@ class ClaudeHeadlessLlm implements LlmService {
     public readonly model: string,
     private readonly bin: string,
     private readonly timeoutMs = 120_000,
+    private readonly settingSources = "",
   ) {}
 
   async complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
     const full = opts.system ? `${opts.system}\n\n${prompt}` : prompt;
     // shell:true so Windows resolves the `claude.cmd` shim (npm global bin).
-    const r = await runProcess(this.bin, ["-p", "--model", this.model], {
+    const r = await runProcess(this.bin, ["-p", ...claudeSettingArgs(this.settingSources), "--model", this.model], {
       stdin: full,
       shell: true,
       timeoutMs: this.timeoutMs,
@@ -156,7 +158,8 @@ export function createLlmForSelection(selection: ModelSelection, cfg = config): 
   switch (selection.provider) {
     case "haiku":
     case "claude-code":
-      if (cfg.router.transport === "headless") return new ClaudeHeadlessLlm(selection.model, cfg.claudeCode.bin);
+      if (cfg.router.transport === "headless")
+        return new ClaudeHeadlessLlm(selection.model, cfg.claudeCode.bin, 120_000, cfg.claudeCode.settingSources);
       return cfg.anthropic.apiKey ? new AnthropicSdkLlm(selection.model, cfg.anthropic.apiKey) : undefined;
     case "ollama":
       return new OllamaLlm(cfg.ollama.baseUrl, selection.model);
@@ -170,7 +173,7 @@ export function createLlmForSelection(selection: ModelSelection, cfg = config): 
 /** Global default LLM (transport-based) — the fallback when a skill resolves no selection. */
 export function createLlmService(cfg = config): LlmService | undefined {
   if (cfg.router.transport === "headless") {
-    return new ClaudeHeadlessLlm(cfg.anthropic.heavyModel, cfg.claudeCode.bin);
+    return new ClaudeHeadlessLlm(cfg.anthropic.heavyModel, cfg.claudeCode.bin, 120_000, cfg.claudeCode.settingSources);
   }
   // sdk transport: resolved key (env → encrypted config) or no synthesis.
   if (!cfg.anthropic.apiKey) return undefined;
