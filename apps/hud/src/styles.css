@@ -32,6 +32,26 @@ body {
 
 a { color: var(--magenta); }
 
+/* ---- Scrollbars — slim, themed, app-wide (replaces the chunky OS default) ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--violet) 50%, var(--line)) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  /* padding-box + transparent border = a slim thumb with breathing room */
+  background: color-mix(in srgb, var(--violet) 42%, var(--line));
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--violet) 70%, var(--line));
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner { background: transparent; }
+
 /* ---- App shell ---- */
 .app {
   height: 100%;
@@ -553,8 +573,23 @@ a { color: var(--magenta); }
 .audio__hint { font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--mute); }
 
 /* ---- Document viewer ---- */
+/* The result view is a NON-blocking panel — no tint, no backdrop. It floats in
+   the upper area so the bottom-center subtitle and the TTS widget stay visible
+   and interactive behind it. pointer-events:none lets clicks fall through to the
+   HUD; the panel itself re-enables them. Close via ✕ or Esc (no click-outside).
+   (The true modals — login/settings — still use .overlay with its dim scrim.) */
+.docoverlay {
+  position: fixed; inset: 0; z-index: 10; pointer-events: none;
+  /* Float below the top bar with breathing room; bottom padding keeps the
+     subtitle/waveform strip clear. */
+  display: flex; justify-content: center; align-items: flex-start; padding: 56px 16px 92px;
+}
+.docoverlay .docviewer { pointer-events: auto; }
 .docviewer {
-  width: min(820px, 92vw); max-height: 86vh; display: flex; flex-direction: column;
+  width: min(820px, 92vw);
+  /* Height is bounded by the overlay's flex box (56px top + 24px bottom padding),
+     so the panel never touches the top bar or the bottom subtitle strip. */
+  max-height: 100%; display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6); overflow: hidden;
 }

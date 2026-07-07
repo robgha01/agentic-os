@@ -30,6 +30,15 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
     };
   }, [path, fetchDoc]);
 
+  // Non-blocking panel: nothing dims/covers the HUD, so there's no click-outside
+  // to close on. Esc closes instead.
+  const closeDoc = hud.closeDoc;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeDoc();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeDoc]);
+
   // Memoized: the parent re-renders on every event-stream tick, and
   // parse+sanitize over a whole record is too heavy to redo each frame.
   const bodyHtml = useMemo(
@@ -53,8 +62,8 @@ export function DocViewer({ hud, path }: { hud: HudState; path: string }) {
   ].filter(Boolean) as string[];
 
   return (
-    <div className="overlay" onClick={hud.closeDoc}>
-      <div className="docviewer" onClick={(e) => e.stopPropagation()}>
+    <div className="docoverlay">
+      <div className="docviewer">
         <header className="docviewer__head">
           <div className="docviewer__path">{path}</div>
           <div className="docviewer__actions">
