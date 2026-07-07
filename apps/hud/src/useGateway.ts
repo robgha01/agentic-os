@@ -88,7 +88,7 @@ export interface HudState {
 
 const MAX_OPS = 60;
 const MAX_NOTES = 40;
-const MAX_CARDS = 8;
+const MAX_CARDS = 24;
 const SERIES_LEN = 32;
 
 /** "inbox-triage" -> "Inbox triage" — a readable fallback label. */

@@ -5,7 +5,7 @@
  *   idle = slow drift · listening = steady pulse · thinking = fast swirl ·
  *   speaking = outward ripple. Honors prefers-reduced-motion (static frame).
  */
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useRef } from "react";
 import type { CoreState } from "../useGateway.js";
 
 interface Point {
@@ -33,7 +33,7 @@ const STATE_SPEED: Record<CoreState, number> = {
   speaking: 0.004,
 };
 
-export function Core({ state }: { state: CoreState }) {
+export const Core = forwardRef<HTMLDivElement, { state: CoreState }>(function Core({ state }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef<CoreState>(state);
   stateRef.current = state;
@@ -106,9 +106,9 @@ export function Core({ state }: { state: CoreState }) {
   }, []);
 
   return (
-    <div className={`core core--${state}`}>
+    <div ref={ref} className={`core core--${state}`}>
       <canvas ref={canvasRef} className="core__canvas" />
       <div className="core__halo" aria-hidden />
     </div>
   );
-}
+});

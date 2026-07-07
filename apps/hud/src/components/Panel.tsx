@@ -9,8 +9,8 @@
  */
 import { useState } from "react";
 import type { HudState } from "../useGateway.js";
-import type { Layout, SlotId } from "../layout.js";
-import { WIDGETS, hasOptions, type WidgetId } from "../widget-registry.js";
+import type { PageSlots, SlotId } from "../layout.js";
+import { ALL_WIDGET_IDS, WIDGETS, hasOptions, type WidgetId } from "../widget-registry.js";
 import {
   loadWidgetOptions,
   resolveOptions,
@@ -22,7 +22,7 @@ import {
 interface PanelProps {
   side: "left" | "right";
   slots: SlotId[];
-  layout: Layout;
+  layout: PageSlots;
   hud: HudState;
   unplaced: WidgetId[];
   onMove: (from: SlotId, to: SlotId) => void;
@@ -34,16 +34,22 @@ export function Panel({ side, slots, layout, hud, unplaced, onMove, onAdd, onRem
   const [dragOver, setDragOver] = useState<SlotId | null>(null);
   const [openOpts, setOpenOpts] = useState<SlotId | null>(null);
   const [openAdd, setOpenAdd] = useState<SlotId | null>(null);
-  const [opts, setOpts] = useState<Record<string, WidgetOptions>>({});
+  // Hydrate every widget's stored options once at mount instead of re-reading
+  // localStorage on every render (the HUD re-renders on each gateway signal).
+  const [opts, setOpts] = useState<Record<string, WidgetOptions>>(() => {
+    const all: Record<string, WidgetOptions> = {};
+    for (const id of ALL_WIDGET_IDS) all[id] = loadWidgetOptions(id);
+    return all;
+  });
 
   const setOpt = (w: WidgetId, key: string, value: string | number | boolean) => {
     setOpts((prev) => {
-      const next = { ...(prev[w] ?? loadWidgetOptions(w)), [key]: value };
+      const next = { ...(prev[w] ?? {}), [key]: value };
       saveWidgetOptions(w, next);
       return { ...prev, [w]: next };
     });
   };
-  const optsFor = (w: WidgetId) => resolveOptions(WIDGETS[w].options, opts[w] ?? loadWidgetOptions(w));
+  const optsFor = (w: WidgetId) => resolveOptions(WIDGETS[w].options, opts[w] ?? {});
 
   return (
     <aside className={`panel panel--${side}`}>
@@ -64,8 +70,10 @@ export function Panel({ side, slots, layout, hud, unplaced, onMove, onAdd, onRem
             onDrop={(e) => {
               e.preventDefault();
               setDragOver(null);
-              const from = e.dataTransfer.getData("text/slot") as SlotId;
-              if (from) onMove(from, slot);
+              const fromSlot = e.dataTransfer.getData("text/slot") as SlotId;
+              const droppedWidget = e.dataTransfer.getData("text/widget") as WidgetId;
+              if (fromSlot) onMove(fromSlot, slot);
+              else if (droppedWidget) onAdd(slot, droppedWidget);
             }}
           >
             {widget && def ? (

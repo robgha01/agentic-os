@@ -8,16 +8,17 @@
  * corners around the sphere (stacking when more than four are live), and an SVG
  * layer draws a line from the sphere's edge to each card so they read as
  * anchored to the ball. Each card has an X to dismiss; a top-center "clear all"
- * flushes the set. Cards are session-only — they appear as tasks complete and
- * clear on reload.
+ * flushes the set. Undismissed cards persist across reload (see useGateway's
+ * saveCards); dismiss or "clear all" removes them for good.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { HudState, TaskCardView } from "../useGateway.js";
 
 // Newest card takes top-right, then top-left, bottom-left, bottom-right —
-// matching the HUD blueprint. Extra cards stack within a corner.
+// matching the HUD blueprint. Only the 4 newest orbit the ball; the rest
+// collapse into the overflow tray.
 const CORNERS = ["tr", "tl", "bl", "br"] as const;
-const STACK_GAP = 64; // px offset when a corner holds more than one card
+const VISIBLE = 4;
 
 interface Link {
   id: number;
@@ -65,8 +66,12 @@ function boxEntry(
   return { x: sx + t0 * dx, y: sy + t0 * dy };
 }
 
-export function ContextCards({ hud }: { hud: HudState }) {
+export function ContextCards({ hud, coreRef }: { hud: HudState; coreRef: RefObject<HTMLElement> }) {
   const cards = hud.taskCards;
+  const visible = cards.slice(0, VISIBLE);
+  const overflow = cards.slice(VISIBLE);
+  const [trayOpen, setTrayOpen] = useState(false);
+
   const orbitRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<number, HTMLDivElement>());
   const [links, setLinks] = useState<Link[]>([]);
@@ -77,11 +82,14 @@ export function ContextCards({ hud }: { hud: HudState }) {
     else cardRefs.current.delete(id);
   }, []);
 
-  // Draw a line from the sphere's edge to each card centre, measured from the
-  // live DOM so it stays attached at any viewport size.
+  // Draw a line from the sphere's edge to each visible card centre, measured
+  // from the live DOM so it stays attached at any viewport size. Keyed on the
+  // stable `cards` reference (not the per-render `visible` slice) so this
+  // callback's identity is stable and the layout effect below doesn't re-fire
+  // every commit — which would loop setState → render → setState forever.
   const measure = useCallback(() => {
     const orbit = orbitRef.current;
-    const core = orbit?.parentElement?.querySelector<HTMLElement>(".core");
+    const core = coreRef.current;
     if (!orbit || !core) return;
     const o = orbit.getBoundingClientRect();
     const c = core.getBoundingClientRect();
@@ -93,7 +101,7 @@ export function ContextCards({ hud }: { hud: HudState }) {
     const radius = (Math.min(c.width, c.height) / 2) * 0.64;
     const startR = radius + 16;
     const next: Link[] = [];
-    for (const card of cards) {
+    for (const card of cards.slice(0, VISIBLE)) {
       const el = cardRefs.current.get(card.id);
       if (!el) continue;
       const r = el.getBoundingClientRect();
@@ -112,7 +120,7 @@ export function ContextCards({ hud }: { hud: HudState }) {
     }
     setSize({ w: o.width, h: o.height });
     setLinks(next);
-  }, [cards]);
+  }, [cards, coreRef]);
 
   useLayoutEffect(() => {
     measure();
@@ -141,17 +149,31 @@ export function ContextCards({ hud }: { hud: HudState }) {
           <line key={l.id} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
         ))}
       </svg>
-      <button className="orbit__clear" onClick={hud.clearCards}>
-        clear all ×{cards.length}
-      </button>
-      {cards.map((c, i) => {
+      <div className="orbit__controls">
+        {overflow.length > 0 ? (
+          <button
+            className={`orbit__more ${trayOpen ? "orbit__more--on" : ""}`}
+            onClick={() => setTrayOpen((v) => !v)}
+            aria-expanded={trayOpen}
+          >
+            +{overflow.length} more
+          </button>
+        ) : null}
+        <button className="orbit__clear" onClick={hud.clearCards}>
+          clear all ×{cards.length}
+        </button>
+      </div>
+      {visible.map((c, i) => {
         const corner = CORNERS[i % CORNERS.length]!;
-        const stack = Math.floor(i / CORNERS.length);
-        const offset = stack * STACK_GAP;
-        const down = corner === "tr" || corner === "tl";
-        const style: CSSProperties = down ? { marginTop: offset } : { marginBottom: offset };
-        return <Card key={c.id} card={c} corner={corner} style={style} hud={hud} setRef={setCardRef} />;
+        return <Card key={c.id} card={c} corner={corner} hud={hud} setRef={setCardRef} />;
       })}
+      {trayOpen && overflow.length > 0 ? (
+        <div className="orbit__tray" role="list" aria-label="older notifications">
+          {overflow.map((c) => (
+            <TrayRow key={c.id} card={c} hud={hud} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -159,13 +181,11 @@ export function ContextCards({ hud }: { hud: HudState }) {
 function Card({
   card: c,
   corner,
-  style,
   hud,
   setRef,
 }: {
   card: TaskCardView;
   corner: string;
-  style: CSSProperties;
   hud: HudState;
   setRef: (id: number, el: HTMLDivElement | null) => void;
 }) {
@@ -173,12 +193,7 @@ function Card({
   const sub =
     c.status === "failed" ? (c.error ?? "failed") : c.resultType ? `${c.resultType} · open ↗` : "open ↗";
   return (
-    <div
-      className={`ccard ccard--${corner}`}
-      style={style}
-      data-status={c.status}
-      ref={(el) => setRef(c.id, el)}
-    >
+    <div className={`ccard ccard--${corner}`} data-status={c.status} ref={(el) => setRef(c.id, el)}>
       <button
         className="ccard__body"
         onClick={() => clickable && hud.openDoc(c.resultPath!)}
@@ -189,6 +204,28 @@ function Card({
         <span className="ccard__sub">{sub}</span>
       </button>
       <button className="ccard__x" onClick={() => hud.dismissCard(c.id)} aria-label={`Dismiss ${c.label}`}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/** One row in the overflow tray — same click/dismiss behavior, list layout. */
+function TrayRow({ card: c, hud }: { card: TaskCardView; hud: HudState }) {
+  const clickable = c.status === "done" && Boolean(c.resultPath);
+  const sub = c.status === "failed" ? (c.error ?? "failed") : c.resultType ?? "open ↗";
+  return (
+    <div className="otray__row" data-status={c.status} role="listitem">
+      <button
+        className="otray__body"
+        onClick={() => clickable && hud.openDoc(c.resultPath!)}
+        disabled={!clickable}
+        title={clickable ? `Open ${c.label}` : c.error}
+      >
+        <span className="otray__label">{c.label}</span>
+        <span className="otray__sub">{sub}</span>
+      </button>
+      <button className="otray__x" onClick={() => hud.dismissCard(c.id)} aria-label={`Dismiss ${c.label}`}>
         ✕
       </button>
     </div>

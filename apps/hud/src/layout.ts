@@ -1,78 +1,56 @@
 /**
- * Widget layout — the panels are drag-arrangeable. Six slots (top/middle/bottom
- * on each side) each hold one widget (or nothing). The default layout is derived
- * from each widget's `defaultSlot` in the registry; the user's arrangement
- * persists to localStorage. Widgets with no slot live in the add-widget palette.
+ * Layout facade — binds the pure `workspace.ts` model to the widget registry and
+ * localStorage. Six slots per page; the default page is derived from each
+ * widget's `defaultSlot`. Persists (and migrates the legacy v4 flat layout) so
+ * existing users keep their arrangement.
  */
-import { ALL_WIDGET_IDS, WIDGETS, type WidgetId } from "./widget-registry.js";
+import { ALL_WIDGET_IDS, WIDGETS } from "./widget-registry.js";
+import {
+  emptySlots, migrate, unplacedIds,
+  type PageSlots, type Page, type SlotId, type Workspace, type WidgetId,
+} from "./workspace.js";
 
-export type { WidgetId };
+export type { SlotId, PageSlots, Page, Workspace, WidgetId };
+export {
+  SLOTS, activePage, activeSlots, moveWidget, placeWidget, removeWidget,
+  addPage, renamePage, removePage, setActivePage,
+} from "./workspace.js";
 
-export type SlotId =
-  | "left-top"
-  | "left-mid"
-  | "left-bottom"
-  | "right-top"
-  | "right-mid"
-  | "right-bottom";
-
-export const SLOTS: SlotId[] = ["left-top", "left-mid", "left-bottom", "right-top", "right-mid", "right-bottom"];
-
-export type Layout = Record<SlotId, WidgetId | null>;
-
-/** Built from each widget's declared `defaultSlot`. */
-export const DEFAULT_LAYOUT: Layout = (() => {
-  const layout: Layout = {
-    "left-top": null,
-    "left-mid": null,
-    "left-bottom": null,
-    "right-top": null,
-    "right-mid": null,
-    "right-bottom": null,
-  };
+/** Default page slots from each widget's declared `defaultSlot`. */
+export const DEFAULT_PAGE_SLOTS: PageSlots = (() => {
+  const slots = emptySlots();
   for (const id of ALL_WIDGET_IDS) {
-    const slot = WIDGETS[id].defaultSlot;
-    if (slot && layout[slot] === null) layout[slot] = id;
+    const slot = WIDGETS[id]!.defaultSlot;
+    if (slot && slots[slot] === null) slots[slot] = id;
   }
-  return layout;
+  return slots;
 })();
 
-// v4: registry-derived layout + add-widget palette.
-const STORAGE_KEY = "aos.hud.layout.v4";
+const NEW_KEY = "aos.hud.workspace.v5";
+const OLD_KEY = "aos.hud.layout.v4";
 
-export function loadLayout(): Layout {
+function readJson(key: string): unknown {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_LAYOUT };
-    const parsed = JSON.parse(raw) as Partial<Layout>;
-    // Merge over defaults, dropping any unknown widget ids (renamed/removed).
-    const merged = { ...DEFAULT_LAYOUT, ...parsed };
-    for (const slot of SLOTS) {
-      const w = merged[slot];
-      if (w && !(w in WIDGETS)) merged[slot] = null;
-    }
-    return merged;
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
   } catch {
-    return { ...DEFAULT_LAYOUT };
+    return null;
   }
 }
 
-export function saveLayout(layout: Layout): void {
+export function loadWorkspace(): Workspace {
+  return migrate(readJson(NEW_KEY), readJson(OLD_KEY), ALL_WIDGET_IDS, DEFAULT_PAGE_SLOTS);
+}
+
+export function saveWorkspace(w: Workspace): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+    localStorage.setItem(NEW_KEY, JSON.stringify(w));
   } catch {
     /* storage unavailable — keep in-memory only */
   }
 }
 
-/** Move/swap the widget in `from` into `to` (and vice-versa). Returns new layout. */
-export function moveWidget(layout: Layout, from: SlotId, to: SlotId): Layout {
-  if (from === to) return layout;
-  return { ...layout, [to]: layout[from], [from]: layout[to] };
-}
-
-/** Widget ids not currently placed in any slot — the add-widget palette. */
-export function unplacedWidgets(layout: Layout): WidgetId[] {
-  const placed = new Set(SLOTS.map((s) => layout[s]).filter(Boolean));
-  return ALL_WIDGET_IDS.filter((id) => !placed.has(id));
+/** Registry-bound convenience: widget ids not on the active page (the tray). */
+export function unplacedWidgets(w: Workspace): WidgetId[] {
+  return unplacedIds(w, ALL_WIDGET_IDS);
 }

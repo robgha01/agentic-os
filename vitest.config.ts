@@ -7,6 +7,7 @@ export default defineConfig({
       "services/gateway/test/**/*.test.ts",
       "packages/shared/test/**/*.test.ts",
       "config/test/**/*.test.ts",
+      "apps/hud/test/**/*.test.ts",
     ],
   },
 });
