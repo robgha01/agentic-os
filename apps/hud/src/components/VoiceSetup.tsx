@@ -23,15 +23,27 @@ export function VoiceSetup({ tts, stt, pythonPath, bind, hud }: {
   const [env, setEnv] = useState<VoiceEnv | null>(null);
   const [online, setOnline] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tool, setTool] = useState<VoiceInstallTool>("pip");
+  // null = not chosen yet; defaulted from env once, then the user's pick sticks.
+  const [tool, setTool] = useState<VoiceInstallTool | null>(null);
 
-  const refresh = useCallback(() => {
-    hud.getVoiceEnv().then((e) => { setEnv(e); setTool(e.uv ? "uv" : "pip"); }).catch(() => setEnv(null));
-    hud.getSidecarHealth().then((h) => setOnline(h.online)).catch(() => setOnline(false));
-  }, [hud]);
-  useEffect(() => { if (open) refresh(); }, [open, refresh]);
+  // Destructure the STABLE method refs — `hud` itself is a new object each gateway
+  // tick, so depending on it would re-run this effect (and reset `tool`) constantly.
+  const { getVoiceEnv, getSidecarHealth } = hud;
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    getVoiceEnv()
+      .then((e) => {
+        if (!alive) return;
+        setEnv(e);
+        setTool((prev) => prev ?? (e.uv ? "uv" : "pip")); // default once; keep user's choice
+      })
+      .catch(() => alive && setEnv(null));
+    getSidecarHealth().then((h) => alive && setOnline(h.online)).catch(() => alive && setOnline(false));
+    return () => { alive = false; };
+  }, [open, getVoiceEnv, getSidecarHealth]);
 
-  const cmd = voiceSetupCommand({ tts: tts as TtsProviderId, stt: stt as SttProviderId }, tool);
+  const cmd = voiceSetupCommand({ tts: tts as TtsProviderId, stt: stt as SttProviderId }, tool ?? "pip");
 
   const act = async (fn: () => Promise<{ online: boolean }>) => {
     setBusy(true);
